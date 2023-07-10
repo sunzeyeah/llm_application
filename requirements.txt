@@ -1,3 +1,7 @@
+requests
+numpy
 torch
-langchain
 transformers
+bitsandbytes>=0.39.0
+langchain
+openai
