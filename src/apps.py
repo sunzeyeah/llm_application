@@ -26,10 +26,6 @@ from src.utils.file_utils import set_seed
 from src.llms import CustomAPI
 from src.tasks import GoogleSearch
 
-TASKS = {
-    "google_search": GoogleSearch
-}
-
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -42,8 +38,9 @@ def get_parser():
     parser.add_argument("--model_name", type=str, default=None)
     parser.add_argument("--api_url", type=str, default=None)
     parser.add_argument("--api_key", type=str, default=None)
+    parser.add_argument("--serp_api_key", type=str, default=None)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--local_rank", type=int, default=-1)
+    parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--checkpoint", type=str)
     # generation config
@@ -85,6 +82,7 @@ def init_llm(args):
     elif args.mode == "custom_api":
         llm = CustomAPI(url=args.api_url)
     elif args.mode == "local":
+        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
         # load tokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
         # init bnb config for quantization
@@ -124,6 +122,7 @@ def init_llm(args):
                 "text-generation",
                 model=model,
                 tokenizer=tokenizer,
+                device=device,
                 device_map={"": args.local_rank},
                 max_new_tokens=args.max_length_generation,
                 # eos_token_id=tokenizer.get_command("<eos>") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
@@ -156,6 +155,7 @@ def init_llm(args):
                 "text-generation",
                 model=model,
                 tokenizer=tokenizer,
+                device=device,
                 device_map={"": args.local_rank},
                 max_new_tokens=args.max_length_generation,
                 eos_token_id=tokenizer.bos_token_id,
@@ -174,6 +174,16 @@ def init_llm(args):
     return llm
 
 
+def init_task(args, llm):
+    if args.task == "google_search":
+        kwargs = {"serp_api_key": args.serp_api_key, "tools": ['serpapi']}
+        task = GoogleSearch(llm=llm, **kwargs)
+    else:
+        raise ValueError(f"Unsupported task: {args.task}")
+
+    return task
+
+
 def main():
     args = get_parser()
     logger.info(f"Parameters: {args}")
@@ -184,7 +194,7 @@ def main():
     llm = init_llm(args)
 
     # load task
-    task = TASKS[args.task]
+    task = init_task(args, llm)
 
     # execute task
     prompt = "In what year was the film Departed with Leopnardo Dicaprio released?"

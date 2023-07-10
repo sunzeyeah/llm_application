@@ -17,9 +17,13 @@
 4. Local：本地加载模型
 
 ### 1. Google搜索
+需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
 ```bash
 # 基于OpenAI API
-python apps.py --mode "openai_api" --task "google_search"
+python src/apps.py \
+  --mode "openai_api" \
+  --task "google_search" \
+  --serp_api_key $SERPAPI_API_KEY
 ```
 
 ## Results

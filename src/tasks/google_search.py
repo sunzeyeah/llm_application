@@ -17,8 +17,6 @@ from langchain.prompts import StringPromptTemplate
 
 from src.tasks.base import Task
 
-os.environ["SERPAPI_API_KEY"] = ''
-
 
 def custom():
     search = SerpAPIWrapper()
@@ -157,6 +155,8 @@ def custom():
 class GoogleSearch(Task):
 
     def __init__(self, **kwargs: Any) -> None:
+        self.serp_api_key = kwargs.get("serp_api_key", None)
+        os.environ["SERPAPI_API_KEY"] = self.serp_api_key
         super().__init__(**kwargs)
 
     def _init_tools(self, **kwargs: Any) -> None:
