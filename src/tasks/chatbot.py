@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from typing import Any, Dict
 
 from langchain import VectorDBQA
 from langchain.document_loaders import DirectoryLoader
@@ -70,7 +70,7 @@ class ChatBot(Task):
 
     def __call__(self,
                  query: str
-                 ) -> dict[str, Any]:
+                 ) -> Dict[str, Any]:
         # 创建问答对象
         qa = VectorDBQA.from_chain_type(llm=self.llm, chain_type="stuff", vectorstore=self.vector_store,
                                         return_source_documents=True)

@@ -50,7 +50,7 @@ def get_parser():
     parser.add_argument("--checkpoint", type=str)
     # generation config
     parser.add_argument("--max_length", type=int, default=2048)
-    parser.add_argument("--max_length_generation", type=int, default=1, help="Maximum number of newly generated tokens")
+    parser.add_argument("--max_length_generation", type=int, default=512, help="Maximum number of newly generated tokens")
     parser.add_argument("--do_sample", action="store_true")
     parser.add_argument("--num_return_sequences", type=int, default=1)
     parser.add_argument("--top_k", type=int, default=10)
@@ -95,7 +95,12 @@ def init_llm(args):
             }
         )
     elif args.mode == "custom_api":
-        llm = CustomAPI(url=args.api_url)
+        llm = CustomAPI(
+            url=args.api_url,
+            max_length=args.max_length,
+            do_sample=args.do_sample,
+            top_p=args.top_p,
+        )
     elif args.mode == "local":
         device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
         # load tokenizer
