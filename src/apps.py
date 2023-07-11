@@ -55,7 +55,7 @@ def get_parser():
     parser.add_argument("--num_return_sequences", type=int, default=1)
     parser.add_argument("--top_k", type=int, default=10)
     parser.add_argument("--top_p", type=float, default=0.8)
-    parser.add_argument("--temperature", type=float, default=0.8)
+    parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--repetition_penalty", type=float, default=1.0)
     # Task: Search
     parser.add_argument("--serp_api_key", type=str, default=None)

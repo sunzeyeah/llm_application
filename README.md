@@ -63,6 +63,9 @@ python src/apps.py \
 以下为OpenAI API的结果
 ### 1. 搜索引擎
 ```bash
+PROMPT="In what year was the film Departed with Leopnardo Dicaprio released?"
+```
+```bash
 > Entering new  chain...
  I need to find information about the movie
 Action: Search
