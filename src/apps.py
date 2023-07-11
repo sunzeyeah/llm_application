@@ -40,6 +40,7 @@ def get_parser():
     parser.add_argument("--task", type=str, required=True, help="google_search,"
                                                                 "specify the task to perform")
     # Optional Params
+    parser.add_argument("--prompt", type=str, default=None)
     parser.add_argument("--model_name", type=str, default=None)
     parser.add_argument("--api_url", type=str, default=None)
     parser.add_argument("--api_key", type=str, default=None)
@@ -211,9 +212,8 @@ def init_task(args, llm):
 
 def task_input_params(args):
     if args.task == "google_search":
-        prompt = "In what year was the film Departed with Leopnardo Dicaprio released?"
         input_params = {
-            "prompt": prompt
+            "prompt": args.prompt
         }
     elif args.task == "summarization":
         input_params = {
@@ -222,9 +222,8 @@ def task_input_params(args):
             "chunk_overlap": args.chunk_overlap
         }
     elif args.task == "chatbot":
-        query = "科大讯飞今年第一季度收入是多少？"
         input_params = {
-            "query": query
+            "query": args.prompt
         }
     else:
         raise ValueError(f"Unsupported task: {args.task}")

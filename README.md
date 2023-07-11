@@ -19,33 +19,41 @@
 4. Local：本地加载模型
 
 ### 1. 搜索引擎
-默认使用Google，需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
+实现搜索引擎的功能。默认使用Google，需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
 ```bash
+PROMPT="In what year was the film Departed with Leopnardo Dicaprio released?"
 # 基于OpenAI API
 python src/apps.py \
-  --mode "openai_api" \
   --task "google_search" \
-  --serp_api_key $SERPAPI_API_KEY
+  --mode "openai_api" \
+  --serp_api_key $SERPAPI_API_KEY \
+  --prompt $PROMPT
 ```
 
 ### 2. 文本摘要
-默认使用Google，需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
+对外部文件生成相应的摘要。```INPUT_FILE```为需要生成摘要的外部文件
 ```bash
 # 基于OpenAI API
 python src/apps.py \
+  --task "summarization" \
   --mode "openai_api" \
-  --task "google_search" \
-  --serp_api_key $SERPAPI_API_KEY
+  --input_file $INPUT_FILE
 ```
 
 ### 3. 问答机器人
-默认使用Google，需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
+基于本地知识库，构建问答机器人。 首先，需要使用embedding工具将知识库转换为向量，默认使用```langchain.embeddings.OpenAIEmbeddings```。然后，基于向量匹配查询后进行回答。
+
+```DATA_DIR```为本地知识库的文件地址。```VECTOR_DIR```为知识库的向量文件地址，第一次计算后向量结果即会保存在该地址，后续可直接加载，无需重复计算。
 ```bash
+PROMPT="科大讯飞今年第一季度收入是多少？"
 # 基于OpenAI API
 python src/apps.py \
+  --task "chatbot" \
   --mode "openai_api" \
-  --task "google_search" \
-  --serp_api_key $SERPAPI_API_KEY
+  --vector_dir $VECTOR_DIR \
+  --data_dir $DATA_DIR \
+  --pattern "**/*.txt" \
+  --prompt $PROMPT
 ```
 
 
