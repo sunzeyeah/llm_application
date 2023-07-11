@@ -33,7 +33,7 @@ class Summarization(Task):
 
     def __call__(self,
                  input_file: str,
-                 chunk_size: int = 512,
+                 chunk_size: int = 2048,
                  chunk_overlap: int = 0
                  ) -> str:
         # 导入文本

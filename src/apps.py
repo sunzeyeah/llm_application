@@ -61,7 +61,7 @@ def get_parser():
     parser.add_argument("--serp_api_key", type=str, default=None)
     # Task: Summarization
     parser.add_argument("--input_file", type=str, default=None, help="摘要的外部文件地址")
-    parser.add_argument("--chunk_size", type=int, default=512)
+    parser.add_argument("--chunk_size", type=int, default=2048)
     parser.add_argument("--chunk_overlap", type=int, default=0)
     # Task: ChatBot
     parser.add_argument("--vector_dir", type=str, default=None, help="本地知识库的向量文件地址")

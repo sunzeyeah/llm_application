@@ -18,7 +18,7 @@ class ChatBot(Task):
                  vector_dir: str,
                  data_dir: str = None,
                  pattern: str = None,
-                 chunk_size: int = 512,
+                 chunk_size: int = 2048,
                  chunk_overlap: int = 0,
                  **kwargs: Any) -> None:
         # 初始化 openai 的 embeddings 对象
@@ -47,10 +47,10 @@ class ChatBot(Task):
 
     def _init_vector_store(self,
                            vector_dir: str,
-                           data_dir: str = None,
-                           pattern: str = None,
-                           chunk_size: int = 512,
-                           chunk_overlap: int = 0,) -> None:
+                           data_dir: str,
+                           pattern: str,
+                           chunk_size: int,
+                           chunk_overlap: int,) -> None:
         if data_dir is not None:
             # 加载文件夹中的所有txt类型的文件
             loader = DirectoryLoader(data_dir, glob=pattern)
