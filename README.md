@@ -2,7 +2,9 @@
 
 基于[LangChain](https://github.com/hwchase17/langchain) ，实现LLM的各类应用，目前提供以下功能：
 
-- Google搜索
+- 搜索引擎：默认使用Google
+- 文本摘要：对外部文件生成摘要
+- 问答机器人：基于本地知识库实现
 
 ## Usage
 支持4种方式初始化langchain LLM对象：
@@ -16,8 +18,8 @@
    - prerequisite：已搭建好自定义API
 4. Local：本地加载模型
 
-### 1. Google搜索
-需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
+### 1. 搜索引擎
+默认使用Google，需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
 ```bash
 # 基于OpenAI API
 python src/apps.py \
@@ -26,4 +28,27 @@ python src/apps.py \
   --serp_api_key $SERPAPI_API_KEY
 ```
 
-## Results
+### 2. 文本摘要
+默认使用Google，需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
+```bash
+# 基于OpenAI API
+python src/apps.py \
+  --mode "openai_api" \
+  --task "google_search" \
+  --serp_api_key $SERPAPI_API_KEY
+```
+
+### 3. 问答机器人
+默认使用Google，需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
+```bash
+# 基于OpenAI API
+python src/apps.py \
+  --mode "openai_api" \
+  --task "google_search" \
+  --serp_api_key $SERPAPI_API_KEY
+```
+
+
+## Reference
+- [LangChain官方文档](https://python.langchain.com/docs/get_started/introduction.html)
+- [LangChain-Chinese-Getting-Started-Guide](https://github.com/liaokongVFX/LangChain-Chinese-Getting-Started-Guide/tree/main)

@@ -6,10 +6,7 @@ from langchain.llms.base import LLM
 class Task:
     def __init__(self,
                  llm: LLM,
-                 **kwargs: Any,
-                 # tools: List[str],
-                 # agent: AgentType = AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                 # verbose: bool = True
+                 **kwargs: Any
                  ) -> None:
         self.llm = llm
         self._init_tools(**kwargs)
@@ -28,6 +25,6 @@ class Task:
     def _init_agent(self, **kwargs: Any) -> None:
         """Initialize Agent"""
 
-    def __call__(self, prompt, **kwargs: Any):
-        """Run Agent"""
-        self.agent.run(prompt)
+    @abstractmethod
+    def __call__(self, **kwargs: Any) -> Any:
+        """execute Task"""

@@ -20,11 +20,16 @@ from langchain.llms import (
     HuggingFacePipeline,
     HuggingFaceHub
 )
+from langchain.embeddings import OpenAIEmbeddings
 
 from src.utils.logger import logger
 from src.utils.file_utils import set_seed
 from src.llms import CustomAPI
-from src.tasks import GoogleSearch
+from src.tasks import (
+    GoogleSearch,
+    Summarization,
+    ChatBot,
+)
 
 
 def get_parser():
@@ -38,7 +43,6 @@ def get_parser():
     parser.add_argument("--model_name", type=str, default=None)
     parser.add_argument("--api_url", type=str, default=None)
     parser.add_argument("--api_key", type=str, default=None)
-    parser.add_argument("--serp_api_key", type=str, default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--bits", type=int, default=16)
@@ -52,6 +56,16 @@ def get_parser():
     parser.add_argument("--top_p", type=float, default=0.8)
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--repetition_penalty", type=float, default=1.0)
+    # Task: Search
+    parser.add_argument("--serp_api_key", type=str, default=None)
+    # Task: Summarization
+    parser.add_argument("--input_file", type=str, default=None, help="摘要的外部文件地址")
+    parser.add_argument("--chunk_size", type=int, default=512)
+    parser.add_argument("--chunk_overlap", type=int, default=0)
+    # Task: ChatBot
+    parser.add_argument("--vector_dir", type=str, default=None, help="本地知识库的向量文件地址")
+    parser.add_argument("--data_dir", type=str, default=None, help="本地知识库原始文件地址")
+    parser.add_argument("--pattern", type=str, default=None, help="本地知识库的文件名pattern")
 
     args = parser.parse_args()
 
@@ -111,7 +125,9 @@ def init_llm(args):
                                                               quantization_config=bnb_config,
                                                               device_map={"": args.local_rank})
             else:
-                model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name, trust_remote_code=True).half()
+                model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name, trust_remote_code=True)
+                if args.local_rank >= 0:
+                    model = model.half()
             # load checkpoint if available
             if args.checkpoint is not None:
                 st = torch.load(args.checkpoint, map_location="cpu")
@@ -123,7 +139,7 @@ def init_llm(args):
                 model=model,
                 tokenizer=tokenizer,
                 device=device,
-                device_map={"": args.local_rank},
+                device_map={"": args.local_rank} if torch.cuda.is_available() else None,
                 max_new_tokens=args.max_length_generation,
                 # eos_token_id=tokenizer.get_command("<eos>") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
                 eos_token_id=tokenizer.get_command("eop") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
@@ -144,7 +160,9 @@ def init_llm(args):
                                                              quantization_config=bnb_config,
                                                              device_map={"": args.local_rank})
             else:
-                model = AutoModelForCausalLM.from_pretrained(args.model_name, use_cache=False, trust_remote_code=True).half()
+                model = AutoModelForCausalLM.from_pretrained(args.model_name, use_cache=False, trust_remote_code=True)
+                if args.local_rank >= 0:
+                    model = model.half()
             # load checkpoint if available
             if args.checkpoint is not None:
                 st = torch.load(args.checkpoint, map_location="cpu")
@@ -156,7 +174,7 @@ def init_llm(args):
                 model=model,
                 tokenizer=tokenizer,
                 device=device,
-                device_map={"": args.local_rank},
+                device_map={"": args.local_rank} if torch.cuda.is_available() else None,
                 max_new_tokens=args.max_length_generation,
                 eos_token_id=tokenizer.bos_token_id,
                 do_sample=args.do_sample,
@@ -178,10 +196,40 @@ def init_task(args, llm):
     if args.task == "google_search":
         kwargs = {"serp_api_key": args.serp_api_key, "tools": ['serpapi']}
         task = GoogleSearch(llm=llm, **kwargs)
+    elif args.task == "summarization":
+        task = Summarization(llm=llm)
+    elif args.task == "chatbot":
+        embeddings = OpenAIEmbeddings()
+        task = ChatBot(llm=llm, embeddings=embeddings, vector_dir=args.vector_dir,
+                       data_dir=args.data_dir, pattern=args.pattern,
+                       chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap)
     else:
         raise ValueError(f"Unsupported task: {args.task}")
 
     return task
+
+
+def task_input_params(args):
+    if args.task == "google_search":
+        prompt = "In what year was the film Departed with Leopnardo Dicaprio released?"
+        input_params = {
+            "prompt": prompt
+        }
+    elif args.task == "summarization":
+        input_params = {
+            "input_file": args.input_file,
+            "chunk_size": args.chunk_size,
+            "chunk_overlap": args.chunk_overlap
+        }
+    elif args.task == "chatbot":
+        query = "科大讯飞今年第一季度收入是多少？"
+        input_params = {
+            "query": query
+        }
+    else:
+        raise ValueError(f"Unsupported task: {args.task}")
+
+    return input_params
 
 
 def main():
@@ -193,12 +241,12 @@ def main():
     # init llm
     llm = init_llm(args)
 
-    # load task
+    # init task
     task = init_task(args, llm)
 
     # execute task
-    prompt = "In what year was the film Departed with Leopnardo Dicaprio released?"
-    logger.info(task(prompt=prompt))
+    input_params = task_input_params(args)
+    logger.info(task(**input_params))
 
 
 if __name__ == "__main__":

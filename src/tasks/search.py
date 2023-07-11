@@ -175,3 +175,7 @@ class GoogleSearch(Task):
     def _task_name(self) -> str:
         """Return name of task"""
         return "google_search"
+
+    def __call__(self, prompt) -> str:
+        """Run Agent"""
+        return self.agent.run(prompt)
