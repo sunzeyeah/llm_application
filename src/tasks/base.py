@@ -6,9 +6,11 @@ from langchain.llms.base import LLM
 class Task:
     def __init__(self,
                  llm: LLM,
+                 language: str = "zh",
                  **kwargs: Any
                  ) -> None:
         self.llm = llm
+        self.language = language
         self._init_tools(**kwargs)
         self._init_agent(**kwargs)
 

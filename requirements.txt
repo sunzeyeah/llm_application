@@ -1,8 +1,9 @@
 requests
 numpy
-sentence_transformers
 torch
+sentence_transformers
 transformers
+xformers
 bitsandbytes>=0.39.0
 langchain
 openai
