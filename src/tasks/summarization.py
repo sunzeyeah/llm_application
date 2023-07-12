@@ -62,18 +62,6 @@ class Summarization(Task):
         if chain_type == "refine":
             self.refine_prompt = REFINE_PROMPT_ZH if self.language == "zh" else REFINE_PROMPT_EN
 
-    # def _init_tools(self, **kwargs: Any) -> None:
-    #     """Initialize Tools"""
-    #     tools = kwargs.get("tools", [])
-    #     self.tool_names = tools
-    #     self.tools = load_tools(tools)
-    #
-    # def _init_agent(self, agent: AgentType = AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-    #                 verbose: bool = True,
-    #                 **kwargs: Any) -> None:
-    #     """Initialize Agent"""
-    #     self.agent = initialize_agent(self.tools, self.llm, agent=agent, verbose=verbose)
-
     @property
     def _task_name(self) -> str:
         """Return name of task"""
