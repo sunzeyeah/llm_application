@@ -2,12 +2,13 @@ import os
 from typing import Any, Dict
 
 from langchain import VectorDBQA
+from langchain.chains import RetrievalQA
 from langchain.document_loaders import DirectoryLoader
 from langchain.embeddings.base import Embeddings
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores import Chroma, VectorStore
 
-from src.utils import logger
+from src.utils import rmdir
 from src.tasks.base import Task
 
 
@@ -52,6 +53,8 @@ class ChatBot(Task):
                            chunk_size: int,
                            chunk_overlap: int,) -> None:
         if data_dir is not None:
+            # 删除原embedding文件
+            rmdir(vector_dir)
             # 加载文件夹中的所有txt类型的文件
             loader = DirectoryLoader(data_dir, glob=pattern)
             # 将数据转成 document 对象，每个文件会作为一个 document
@@ -72,7 +75,8 @@ class ChatBot(Task):
                  query: str
                  ) -> Dict[str, Any]:
         # 创建问答对象
-        qa = VectorDBQA.from_chain_type(llm=self.llm, chain_type="stuff", vectorstore=self.vector_store,
-                                        return_source_documents=True)
+        # qa = VectorDBQA.from_chain_type(llm=self.llm, chain_type="stuff", vectorstore=self.vector_store,
+        #                                 return_source_documents=True)
+        qa = RetrievalQA.from_chain_type(llm=self.llm, chain_type="stuff", retriever=self.vector_store.as_retriever())
         # 进行问答
         return qa({"query": query})

@@ -20,7 +20,7 @@ from langchain.llms import (
     HuggingFacePipeline,
     HuggingFaceHub
 )
-from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 
 from src.utils.logger import logger
 from src.utils.file_utils import set_seed
@@ -64,6 +64,8 @@ def get_parser():
     parser.add_argument("--chunk_size", type=int, default=2048)
     parser.add_argument("--chunk_overlap", type=int, default=0)
     # Task: ChatBot
+    parser.add_argument("--embedding_name", type=str, default=None, help="openai or path to huggingface embedding"
+                                                                         "embedding method to use")
     parser.add_argument("--vector_dir", type=str, default=None, help="本地知识库的向量文件地址")
     parser.add_argument("--data_dir", type=str, default=None, help="本地知识库原始文件地址")
     parser.add_argument("--pattern", type=str, default=None, help="本地知识库的文件名pattern")
@@ -205,7 +207,12 @@ def init_task(args, llm):
     elif args.task == "summarization":
         task = Summarization(llm=llm)
     elif args.task == "chatbot":
-        embeddings = OpenAIEmbeddings()
+        if args.embedding_name == "openai":
+            embeddings = OpenAIEmbeddings()
+        else:
+            embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+            embeddings = HuggingFaceEmbeddings(model_name=args.embedding_name,
+                                               model_kwargs={'device': embedding_device})
         task = ChatBot(llm=llm, embeddings=embeddings, vector_dir=args.vector_dir,
                        data_dir=args.data_dir, pattern=args.pattern,
                        chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap)
