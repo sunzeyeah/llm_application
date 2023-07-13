@@ -97,6 +97,7 @@ class ChatBot(Task):
         #                                 verbose=self.verbose)
         retriever = self.vector_store.as_retriever(search_type=search_type, search_kwargs={"k": k})
         qa = RetrievalQA.from_chain_type(llm=self.llm, chain_type="stuff", retriever=retriever,
-                                         chain_type_kwargs=chain_type_kwargs, verbose=self.verbose)
+                                         return_source_documents=True, chain_type_kwargs=chain_type_kwargs,
+                                         verbose=self.verbose)
         # 进行问答
         return qa({"query": query})

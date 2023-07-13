@@ -22,7 +22,9 @@ PROMPT_TEMPLATE_ZH = """使用以下信息来回答问题。如果你不知道�
 PROMPT_ZH = PromptTemplate(
     template=PROMPT_TEMPLATE_ZH, input_variables=["context", "question"]
 )
-MODEL_NAME = "/Users/zeyesun/Documents/Data/models/bloomz-560m"
+# MODEL_NAME = "/Users/zeyesun/Documents/Data/models/bloomz-560m"
+# MODEL_NAME = "D:\\Data\\models\\chatglm2-6B-int4"
+MODEL_NAME = "D:\\Data\\models\\bloomz-560m"
 BITS = 16
 CHECKPOINT = None
 LOCAL_RANK = 0
@@ -32,22 +34,24 @@ TOP_P = 0.9
 TEMPERATURE = 0.9
 REPETITION_PENALTY = 1.0
 SENTENCE_SIZE = 1024
-VECTOR_DIR = "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings"
-EMBEDDING_MODEL_NAME = "/Users/zeyesun/Documents/Data/models/text2vec-large-chinese"
+# VECTOR_DIR = "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings"
+# EMBEDDING_MODEL_NAME = "/Users/zeyesun/Documents/Data/models/text2vec-large-chinese"
+VECTOR_DIR = "D:\\Data\\chatgpt\\output\\embeddings\\test"
+EMBEDDING_MODEL_NAME = "D:\\Data\\models\\text2vec-large-chinese"
 SEARCH_TYPE = "similarity"
-K = 3
+K = 1
 FLAG_USER_NAME = uuid.uuid4().hex
 
 
 def get_vs_list():
-    lst_default = ["新建知识库"]
+    # lst_default = ["新建知识库"]
     if not os.path.exists(VECTOR_DIR):
-        return lst_default
+        return []
     lst = os.listdir(VECTOR_DIR)
     if not lst:
-        return lst_default
+        return []
     lst.sort()
-    return lst_default + lst
+    return lst
 
 
 def add_vs_name(vs_name, chatbot):
@@ -127,12 +131,12 @@ webui_title = """
 # 🎉langchain-ChatGLM WebUI🎉
 👍 [https://github.com/imClumsyPanda/langchain-ChatGLM](https://github.com/imClumsyPanda/langchain-ChatGLM)
 """
-default_vs = get_vs_list()[0] if len(get_vs_list()) > 1 else "为空"
-init_message = f"""欢迎使用 langchain-ChatGLM Web UI！
+# default_vs = get_vs_list()[0] if len(get_vs_list()) > 1 else "为空"
+init_message = f"""欢迎使用 LLM Application Web UI！
 
 请在右侧切换模式，目前支持直接与 LLM 模型对话或基于本地知识库问答。
 
-知识库问答模式，选择知识库名称后，即可开始问答，当前知识库{default_vs}，如有需要可以在选择知识库名称后上传文件/文件夹至知识库。
+知识库问答模式，选择知识库名称后，即可开始问答，当前知识库：{os.path.basename(VECTOR_DIR)}，如有需要可以在选择知识库名称后上传文件/文件夹至知识库。
 
 知识库暂不支持文件删除，该功能将在后续版本中推出。
 """
@@ -266,9 +270,10 @@ chain_type_kwargs = {"prompt": PROMPT_ZH}
 # qa = VectorDBQA.from_chain_type(llm=self.llm, chain_type="stuff", vectorstore=self.vector_store,
 #                                 return_source_documents=True, chain_type_kwargs=chain_type_kwargs,
 #                                 verbose=self.verbose)
-retriever = vector_store.as_retriever(search_type=SEARCH_TYPE, k=K)
+retriever = vector_store.as_retriever(search_type=SEARCH_TYPE, search_kwargs={"k": K})
 qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever,
-                                 chain_type_kwargs=chain_type_kwargs, verbose=False)
+                                 return_source_documents=True, chain_type_kwargs=chain_type_kwargs,
+                                 verbose=False)
 model_status = """模型已成功加载，可以开始对话，或从右侧选择模式后开始对话"""
 
 flag_csv_logger = gr.CSVLogger()
@@ -280,6 +285,7 @@ default_theme_args = dict(
 
 def get_answer(query, vs_path, history, mode, score_threshold: float = None,
                streaming: bool = True):
+    # logger.info(f"[get_answer] history: {history}")
     if mode == "Bing搜索问答":
         for resp, history in local_doc_qa.get_search_result_based_answer(
                 query=query, chat_history=history, streaming=streaming):
@@ -293,19 +299,20 @@ def get_answer(query, vs_path, history, mode, score_threshold: float = None,
                     enumerate(resp["source_documents"])])
             history[-1][-1] += source
             yield history, ""
-    elif mode == "知识库问答" and vs_path is not None and os.path.exists(vs_path) and "index.faiss" in os.listdir(
-            vs_path):
+    elif mode == "知识库问答" and vs_path is not None and os.path.exists(vs_path):
+            # and "index.faiss" in os.listdir(vs_path):
         result = qa({"query": query})
-        logger.info(f"result: {result}, query: {query}")
-        for resp, history in result:
-            source = "\n\n"
-            source += "".join(
-                [f"""<details> <summary>出处 [{i + 1}] {os.path.split(doc.metadata["source"])[-1]}</summary>\n"""
-                 f"""{doc.page_content}\n"""
-                 f"""</details>"""
-                 for i, doc in
-                 enumerate(resp["source_documents"])])
-            history[-1][-1] += source
+        # logger.info(f"query: {query}, result: {result}")
+        for resp in [result]:
+            reply = "\n\n"
+            source = [
+                f"""<details> <summary>出处：[{i + 1}] {os.path.split(doc.metadata["source"])[-1]}</summary>\n"""
+                f"""{doc.page_content}\n"""
+                f"""</details>"""
+                for i, doc in enumerate(resp["source_documents"])
+            ]
+            reply += "\n\n".join([f"问：{query}", f"答：{result['result']}"] + source)
+            history[-1][-1] += reply
             yield history, ""
     elif mode == "知识库测试":
         if os.path.exists(vs_path):
@@ -343,10 +350,9 @@ def get_answer(query, vs_path, history, mode, score_threshold: float = None,
 
 
 with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as demo:
-    vs_path, file_status, model_status = gr.State(
-        os.path.join(VECTOR_DIR, get_vs_list()[0], "vector_store") if len(get_vs_list()) > 1 else ""), gr.State(
-        ""), gr.State(
-        model_status)
+    vs_path = gr.State(VECTOR_DIR)
+    file_status = gr.State("")
+    model_status = gr.State(model_status)
     gr.Markdown(webui_title)
     with gr.Tab("对话"):
         with gr.Row():
@@ -422,7 +428,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     #                          inputs=[select_vs, folder_files, sentence_size, chatbot, vs_add,
                     #                                  vs_add],
                     #                          outputs=[vs_path, folder_files, chatbot, files_to_delete], )
-                    # flag_csv_logger.setup([query, vs_path, chatbot, mode], "flagged")
+                    flag_csv_logger.setup([query, vs_path, chatbot, mode], "flagged")
                     query.submit(get_answer,
                                  [query, vs_path, chatbot, mode],
                                  [chatbot, query])

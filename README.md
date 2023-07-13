@@ -111,3 +111,4 @@ US Treasury Secretary Janet Yellen recently concluded a four-day visit to China 
 ## Reference
 - [LangChain官方文档](https://python.langchain.com/docs/get_started/introduction.html)
 - [LangChain-Chinese-Getting-Started-Guide](https://github.com/liaokongVFX/LangChain-Chinese-Getting-Started-Guide/tree/main)
+- [langchain-ChatGLM](https://github.com/imClumsyPanda/langchain-ChatGLM)
