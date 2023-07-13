@@ -70,7 +70,7 @@ class ChatBot(Task):
             rmdir(vector_dir)
             # 加载文件夹中的所有txt类型的文件
             loader = DirectoryLoader(data_dir, glob=pattern, loader_cls=TextLoader, show_progress=True,
-                                     use_multithreading=True, max_concurrency=8)
+                                     use_multithreading=True, max_concurrency=8, loader_kwargs={"encoding": "utf-8"})
             # 将数据转成 document 对象，每个文件会作为一个 document
             documents = loader.load()
             # 初始化加载器
@@ -95,7 +95,7 @@ class ChatBot(Task):
         # qa = VectorDBQA.from_chain_type(llm=self.llm, chain_type="stuff", vectorstore=self.vector_store,
         #                                 return_source_documents=True, chain_type_kwargs=chain_type_kwargs,
         #                                 verbose=self.verbose)
-        retriever = self.vector_store.as_retriever(search_type=search_type, k=k)
+        retriever = self.vector_store.as_retriever(search_type=search_type, search_kwargs={"k": k})
         qa = RetrievalQA.from_chain_type(llm=self.llm, chain_type="stuff", retriever=retriever,
                                          chain_type_kwargs=chain_type_kwargs, verbose=self.verbose)
         # 进行问答
