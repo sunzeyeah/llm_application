@@ -17,14 +17,14 @@ from transformers import (
 )
 from langchain.llms import (
     OpenAI,
-    HuggingFacePipeline,
+    # HuggingFacePipeline,
     HuggingFaceHub
 )
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 
 from src.utils.logger import logger
 from src.utils.file_utils import set_seed
-from src.llms import CustomAPI, ChatGLMTextGenerationPipeline
+from src.llms import CustomAPI, ChatGLMTextGenerationPipeline, HuggingFacePipeline
 from src.tasks import (
     GoogleSearch,
     Summarization,

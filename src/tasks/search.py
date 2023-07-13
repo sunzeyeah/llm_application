@@ -11,7 +11,8 @@ from langchain.agents import (
     AgentOutputParser,
     AgentType,
 )
-from langchain.schema import AgentAction, AgentFinish
+from langchain.agents.mrkl.output_parser import MRKLOutputParser
+from langchain.schema import AgentAction, AgentFinish, OutputParserException
 from langchain.tools import Tool
 from langchain.prompts import StringPromptTemplate
 
@@ -183,6 +184,64 @@ def custom():
     agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True)
 
 
+class ZHMRKLOutputParser(AgentOutputParser):
+
+    FINAL_ANSWER_ACTION_ZH = "最终答案："
+
+    def get_format_instructions(self) -> str:
+        return FORMAT_INSTRUCTIONS_ZH
+
+    def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
+        includes_answer = self.FINAL_ANSWER_ACTION_ZH in text
+        regex = (
+            r"行动\s*\d*\s*[:：][\s]*(.*?)[\s]*行动\s*\d*\s*输入\s*\d*\s*[:：][\s]*(.*)"
+        )
+        action_match = re.search(regex, text, re.DOTALL)
+        if action_match:
+            if includes_answer:
+                raise OutputParserException(
+                    "Parsing LLM output produced both a final answer "
+                    f"and a parse-able action: {text}"
+                )
+            action = action_match.group(1).strip()
+            action_input = action_match.group(2)
+            tool_input = action_input.strip(" ")
+            # ensure if its a well formed SQL query we don't remove any trailing " chars
+            if tool_input.startswith("SELECT ") is False:
+                tool_input = tool_input.strip('"')
+
+            return AgentAction(action, tool_input, text)
+
+        elif includes_answer:
+            return AgentFinish(
+                {"output": text.split(self.FINAL_ANSWER_ACTION_ZH)[-1].strip()}, text
+            )
+
+        if not re.search(r"行动\s*\d*\s*[:：][\s]*(.*?)", text, re.DOTALL):
+            raise OutputParserException(
+                f"Could not parse LLM output: `{text}`",
+                observation="Invalid Format: Missing '行动：' after '思考过程：'",
+                llm_output=text,
+                send_to_llm=True,
+            )
+        elif not re.search(
+                r"[\s]*行动\s*\d*\s*输入\s*\d*\s*[:：][\s]*(.*)", text, re.DOTALL
+        ):
+            raise OutputParserException(
+                f"Could not parse LLM output: `{text}`",
+                observation="Invalid Format:"
+                            " Missing '行动输入：' after '行动：'",
+                llm_output=text,
+                send_to_llm=True,
+            )
+        else:
+            raise OutputParserException(f"Could not parse LLM output: `{text}`")
+
+    @property
+    def _type(self) -> str:
+        return "mrkl_zh"
+
+
 class GoogleSearch(Task):
 
     def __init__(self, **kwargs: Any) -> None:
@@ -192,6 +251,7 @@ class GoogleSearch(Task):
         self.prefix = PREFIX_ZH if self.language == "zh" else PREFIX_EN
         self.suffix = SUFFIX_ZH if self.language == "zh" else PREFIX_EN
         self.format_instructions = FORMAT_INSTRUCTIONS_ZH if self.language == "zh" else FORMAT_INSTRUCTIONS_EN
+        self.output_parser = ZHMRKLOutputParser() if self.language == "zh" else MRKLOutputParser()
         self._init_tools(**kwargs)
         self._init_agent(**kwargs)
 
@@ -207,7 +267,8 @@ class GoogleSearch(Task):
         """Initialize Agent"""
         self.agent = initialize_agent(self.tools, self.llm, agent=agent, verbose=verbose,
                                       prefix=self.prefix, suffix=self.suffix,
-                                      format_instructions=self.format_instructions)
+                                      format_instructions=self.format_instructions,
+                                      output_parser=self.output_parser)
 
     @property
     def _task_name(self) -> str:
