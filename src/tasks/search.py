@@ -18,6 +18,8 @@ from langchain.prompts import StringPromptTemplate
 
 from src.tasks.base import Task
 
+TOOL_NAME_EN = "Search"
+TOOL_DESCRIPTION_EN = "A search engine. Useful for when you need to answer questions about current events. Input should be a search query."
 PREFIX_EN = """Answer the following questions as best you can. You have access to the following tools:"""
 FORMAT_INSTRUCTIONS_EN = """Use the following format:
 
@@ -33,6 +35,9 @@ SUFFIX_EN = """Begin!
 
 Question: {input}
 Thought: {agent_scratchpad}"""
+
+TOOL_NAME_ZH = "搜索引擎"
+TOOL_DESCRIPTION_ZH = "搜索引擎有助于回答即时性问题（如：新闻热点），输入为查询语句。"
 PREFIX_ZH = """请回答以下问题，你可以使用如下工具："""
 FORMAT_INSTRUCTIONS_ZH = """请使用如下格式：
 
@@ -259,7 +264,15 @@ class GoogleSearch(Task):
         """Initialize Tools"""
         tools = kwargs.get("tools", [])
         self.tool_names = tools
-        self.tools = load_tools(tools)
+        # self.tools = load_tools(tools)
+        self.tools = [
+            Tool(
+                name=TOOL_NAME_ZH if self.language == "zh" else TOOL_NAME_EN,
+                description=TOOL_DESCRIPTION_ZH if self.language == "zh" else TOOL_DESCRIPTION_EN,
+                func=SerpAPIWrapper(**kwargs).run,
+                coroutine=SerpAPIWrapper(**kwargs).arun,
+            )
+        ]
 
     def _init_agent(self, agent: AgentType = AgentType.ZERO_SHOT_REACT_DESCRIPTION,
                     verbose: bool = True,
