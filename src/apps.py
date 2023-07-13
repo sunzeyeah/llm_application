@@ -1,10 +1,10 @@
 
 import sys
 
-sys.path.insert(0, "/root/autodl-tmp/Code/llm_applications")
-sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/llm_applications")
+sys.path.insert(0, "/root/autodl-tmp/Code/llm_application")
+sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/llm_application")
 # sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
-sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/llm_applications")
+sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/llm_application")
 import os
 import argparse
 import torch
