@@ -24,7 +24,7 @@ from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 
 from src.utils.logger import logger
 from src.utils.file_utils import set_seed
-from src.llms import CustomAPI
+from src.llms import CustomAPI, ChatGLMTextGenerationPipeline
 from src.tasks import (
     GoogleSearch,
     Summarization,
@@ -124,7 +124,7 @@ def init_llm(args):
             bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
         )
         # load model and init pipeline
-        if "glm" in args.model_name:
+        if "chatglm" in args.model_name:
             # encoder model structure
             if args.bits in [4, 8]:
                 model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name,
@@ -141,16 +141,17 @@ def init_llm(args):
                 st = torch.load(args.checkpoint, map_location="cpu")
                 model.load_state_dict(st)
                 del st
-            # init pipeline
-            pipe = pipeline(
-                "text-generation",
+            # set eop token
+            if "chatglm2" in args.model_name:
+                tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
+            # init huggingface pipeline
+            pipe = ChatGLMTextGenerationPipeline(
                 model=model,
                 tokenizer=tokenizer,
                 device=device,
-                device_map={"": args.local_rank} if torch.cuda.is_available() else None,
+                # device_map={"": args.local_rank} if torch.cuda.is_available() else None,
                 max_new_tokens=args.max_length_generation,
-                # eos_token_id=tokenizer.get_command("<eos>") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
-                eos_token_id=tokenizer.get_command("eop") if "chatglm2" in args.model_name else tokenizer.eop_token_id,
+                eos_token_id=tokenizer.eop_token_id,
                 pad_token_id=tokenizer.pad_token_id,
                 do_sample=args.do_sample,
                 num_return_sequences=args.num_return_sequences,
@@ -176,7 +177,7 @@ def init_llm(args):
                 st = torch.load(args.checkpoint, map_location="cpu")
                 model.load_state_dict(st)
                 del st
-            # init pipeline
+            # init huggingface pipeline
             pipe = pipeline(
                 "text-generation",
                 model=model,
@@ -192,7 +193,7 @@ def init_llm(args):
                 temperature=args.temperature,
                 repetition_penalty=args.repetition_penalty
             )
-        # init llm
+        # init langchain llm from huggingface pipeline
         llm = HuggingFacePipeline(pipeline=pipe)
     else:
         raise ValueError(f"Unsupported mode: {args.mode}")

@@ -17,6 +17,37 @@ from langchain.prompts import StringPromptTemplate
 
 from src.tasks.base import Task
 
+PREFIX_EN = """Answer the following questions as best you can. You have access to the following tools:"""
+FORMAT_INSTRUCTIONS_EN = """Use the following format:
+
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question"""
+SUFFIX_EN = """Begin!
+
+Question: {input}
+Thought: {agent_scratchpad}"""
+PREFIX_ZH = """请回答以下问题，你可以使用如下工具："""
+FORMAT_INSTRUCTIONS_ZH = """请使用如下格式：
+
+问题：你需要回答的问题
+思考过程：你需要考虑怎么做和如何做
+行动：你需要从如下列表中选择一项[{tool_names}]，作为下一步行动
+行动输入：行动的输入
+结果：采取行动后的结果
+... (这个“思考过程/行动/行动输入/结果”的流程可以多次重复)
+思考过程：我现在知道了最终答案
+最终答案：问题的最终答案"""
+SUFFIX_ZH = """开始！
+
+问题：{input}
+思考过程：{agent_scratchpad}"""
+
 
 def custom():
     search = SerpAPIWrapper()
@@ -155,9 +186,14 @@ def custom():
 class GoogleSearch(Task):
 
     def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
         self.serp_api_key = kwargs.get("serp_api_key", None)
         os.environ["SERPAPI_API_KEY"] = self.serp_api_key
-        super().__init__(**kwargs)
+        self.prefix = PREFIX_ZH if self.language == "zh" else PREFIX_EN
+        self.suffix = SUFFIX_ZH if self.language == "zh" else PREFIX_EN
+        self.format_instructions = FORMAT_INSTRUCTIONS_ZH if self.language == "zh" else FORMAT_INSTRUCTIONS_EN
+        self._init_tools(**kwargs)
+        self._init_agent(**kwargs)
 
     def _init_tools(self, **kwargs: Any) -> None:
         """Initialize Tools"""
@@ -169,13 +205,17 @@ class GoogleSearch(Task):
                     verbose: bool = True,
                     **kwargs: Any) -> None:
         """Initialize Agent"""
-        self.agent = initialize_agent(self.tools, self.llm, agent=agent, verbose=verbose)
+        self.agent = initialize_agent(self.tools, self.llm, agent=agent, verbose=verbose,
+                                      prefix=self.prefix, suffix=self.suffix,
+                                      format_instructions=self.format_instructions)
 
     @property
     def _task_name(self) -> str:
         """Return name of task"""
         return "google_search"
 
-    def __call__(self, prompt) -> str:
+    def __call__(self,
+                 prompt: str,
+                 **kwargs: Any) -> str:
         """Run Agent"""
         return self.agent.run(prompt)
