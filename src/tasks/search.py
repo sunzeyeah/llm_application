@@ -278,10 +278,14 @@ class GoogleSearch(Task):
                     verbose: bool = True,
                     **kwargs: Any) -> None:
         """Initialize Agent"""
+        agent_kwargs = {
+            "prefix": self.prefix,
+            "suffix": self.suffix,
+            "format_instructions": self.format_instructions,
+            "output_parser": self.output_parser
+        }
         self.agent = initialize_agent(self.tools, self.llm, agent=agent, verbose=verbose,
-                                      prefix=self.prefix, suffix=self.suffix,
-                                      format_instructions=self.format_instructions,
-                                      output_parser=self.output_parser)
+                                      agent_kwargs=agent_kwargs)
 
     @property
     def _task_name(self) -> str:
