@@ -11,3 +11,4 @@ google-search-results
 unstructured
 pdf2image
 chromadb
+gradio
