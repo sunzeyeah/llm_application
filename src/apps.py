@@ -71,6 +71,9 @@ def get_parser():
     parser.add_argument("--vector_dir", type=str, default=None, help="本地知识库的向量文件地址")
     parser.add_argument("--data_dir", type=str, default=None, help="本地知识库原始文件地址")
     parser.add_argument("--pattern", type=str, default=None, help="本地知识库的文件名pattern")
+    parser.add_argument("--k", type=int, default=3, help="number of docs to recall for answering")
+    parser.add_argument("--search_type", type=str, default="similarity", help="similarity, similarity_score_threshold, mmr"
+                                                                              "metrics used to compare document vectors")
 
     args = parser.parse_args()
 
@@ -240,7 +243,9 @@ def task_input_params(args):
         }
     elif args.task == "chatbot":
         input_params = {
-            "query": args.prompt
+            "query": args.prompt,
+            "search_type": args.search_type,
+            "k": args.k
         }
     else:
         raise ValueError(f"Unsupported task: {args.task}")

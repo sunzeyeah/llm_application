@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 from langchain import VectorDBQA, PromptTemplate
 from langchain.chains import RetrievalQA
-from langchain.document_loaders import DirectoryLoader
+from langchain.document_loaders import DirectoryLoader, TextLoader
 from langchain.embeddings.base import Embeddings
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores import Chroma, VectorStore
@@ -62,11 +62,15 @@ class ChatBot(Task):
                            pattern: str,
                            chunk_size: int,
                            chunk_overlap: int,) -> None:
+        if not os.path.exists(vector_dir):
+            os.mkdir(vector_dir)
+
         if data_dir is not None:
             # 删除原embedding文件
             rmdir(vector_dir)
             # 加载文件夹中的所有txt类型的文件
-            loader = DirectoryLoader(data_dir, glob=pattern)
+            loader = DirectoryLoader(data_dir, glob=pattern, loader_cls=TextLoader, show_progress=True,
+                                     use_multithreading=True, max_concurrency=8)
             # 将数据转成 document 对象，每个文件会作为一个 document
             documents = loader.load()
             # 初始化加载器
