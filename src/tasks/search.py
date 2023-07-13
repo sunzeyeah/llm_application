@@ -275,7 +275,6 @@ class GoogleSearch(Task):
         ]
 
     def _init_agent(self, agent: AgentType = AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                    verbose: bool = True,
                     **kwargs: Any) -> None:
         """Initialize Agent"""
         agent_kwargs = {
@@ -284,7 +283,7 @@ class GoogleSearch(Task):
             "format_instructions": self.format_instructions,
             "output_parser": self.output_parser
         }
-        self.agent = initialize_agent(self.tools, self.llm, agent=agent, verbose=verbose,
+        self.agent = initialize_agent(self.tools, self.llm, agent=agent, verbose=self.verbose,
                                       agent_kwargs=agent_kwargs)
 
     @property

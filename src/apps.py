@@ -42,12 +42,14 @@ def get_parser():
     # Optional Params
     parser.add_argument("--prompt", type=str, default=None)
     parser.add_argument("--model_name", type=str, default=None)
+    parser.add_argument("--language", type=str, default="zh", help="prompt使用的语言，一般与模型匹配")
     parser.add_argument("--api_url", type=str, default=None)
     parser.add_argument("--api_key", type=str, default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--checkpoint", type=str)
+    parser.add_argument("--verbose", action="store_true", help="是否输出中间结果")
     # generation config
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--max_length_generation", type=int, default=512, help="Maximum number of newly generated tokens")
@@ -204,9 +206,10 @@ def init_llm(args):
 def init_task(args, llm):
     if args.task == "google_search":
         kwargs = {"serp_api_key": args.serp_api_key, "tools": ['serpapi']}
-        task = GoogleSearch(llm=llm, **kwargs)
+        task = GoogleSearch(llm=llm, language=args.language, verbose=args.verbose,
+                            **kwargs)
     elif args.task == "summarization":
-        task = Summarization(llm=llm)
+        task = Summarization(llm=llm, language=args.language, verbose=args.verbose)
     elif args.task == "chatbot":
         if args.embedding_name == "openai":
             embeddings = OpenAIEmbeddings()
@@ -214,7 +217,8 @@ def init_task(args, llm):
             embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
             embeddings = HuggingFaceEmbeddings(model_name=args.embedding_name,
                                                model_kwargs={'device': embedding_device})
-        task = ChatBot(llm=llm, embeddings=embeddings, vector_dir=args.vector_dir,
+        task = ChatBot(llm=llm, language=args.language, verbose=args.verbose,
+                       embeddings=embeddings, vector_dir=args.vector_dir,
                        data_dir=args.data_dir, pattern=args.pattern,
                        chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap)
     else:

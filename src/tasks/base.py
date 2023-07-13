@@ -7,10 +7,12 @@ class Task:
     def __init__(self,
                  llm: LLM,
                  language: str = "zh",
+                 verbose: bool = True,
                  **kwargs: Any
                  ) -> None:
         self.llm = llm
         self.language = language
+        self.verbose = verbose
 
     @property
     @abstractmethod

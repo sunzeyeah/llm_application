@@ -90,10 +90,10 @@ class Summarization(Task):
 
         # 创建总结链
         if self.chain_type == "refine":
-            chain = load_summarize_chain(self.llm, chain_type=self.chain_type, verbose=True,
+            chain = load_summarize_chain(self.llm, chain_type=self.chain_type, verbose=self.verbose,
                                          question_prompt=self.prompt, refine_prompt=self.refine_prompt)
         else:
-            chain = load_summarize_chain(self.llm, chain_type=self.chain_type, verbose=True,
+            chain = load_summarize_chain(self.llm, chain_type=self.chain_type, verbose=self.verbose,
                                          prompt=self.prompt)
 
         # 执行总结链，（为了快速演示，只总结前5段）
