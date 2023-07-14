@@ -27,7 +27,7 @@ PROMPT_EN = PromptTemplate(
     template=PROMPT_TEMPLATE_EN, input_variables=["context", "question"]
 )
 
-PROMPT_TEMPLATE_ZH = """使用以下信息来回答问题。如果你不知道答案，请直接说你不知道，不要编造答案。
+PROMPT_TEMPLATE_ZH = """使用以下信息来回答问题。如果信息中不包含问题的答案，请直接说你不知道，不要编造答案。
 
 {context}
 
@@ -73,7 +73,7 @@ class FAQLoader(TextLoader):
         return docs
 
 
-def format_document(doc: Document, prompt: BasePromptTemplate = DOCUMENT_PROMPT_TEMPLATE) -> str:
+def format_document(doc: Document, prompt: BasePromptTemplate) -> str:
     """Format a document into a string based on a prompt template.
 
     First, this pulls information from the document from two sources:
@@ -122,6 +122,10 @@ def format_document(doc: Document, prompt: BasePromptTemplate = DOCUMENT_PROMPT_
 
 
 class FAQDocumentsChain(StuffDocumentsChain):
+
+    document_prompt: BasePromptTemplate = DOCUMENT_PROMPT_TEMPLATE
+    document_separator: str = "\n"
+
     def _get_inputs(self, docs: List[Document], **kwargs: Any) -> dict:
         """Construct inputs from kwargs and docs.
 
@@ -161,13 +165,9 @@ class FAQRetrievalQA(RetrievalQA):
         """Initialize from LLM."""
         _prompt = prompt or PROMPT_SELECTOR.get_prompt(llm)
         llm_chain = LLMChain(llm=llm, prompt=_prompt)
-        document_prompt = PromptTemplate(
-            input_variables=["page_content"], template="Context:\n{page_content}"
-        )
         combine_documents_chain = FAQDocumentsChain(
             llm_chain=llm_chain,
-            document_variable_name="context",
-            document_prompt=document_prompt,
+            document_variable_name="context"
         )
 
         return cls(combine_documents_chain=combine_documents_chain, **kwargs)

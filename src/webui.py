@@ -3,25 +3,16 @@ import shutil
 import gradio as gr
 import uuid
 import torch
-from langchain import PromptTemplate
-from langchain.chains import RetrievalQA
-from langchain.embeddings import HuggingFaceEmbeddings
 
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import Chroma
 from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoModelForCausalLM, pipeline
 
 from src.llms import ChatGLMTextGenerationPipeline, HuggingFacePipeline
 from src.utils import logger
+from src.tasks.chatbot import PROMPT_ZH, FAQRetrievalQA
 
-PROMPT_TEMPLATE_ZH = """使用以下信息来回答问题。如果你不知道答案，请直接说你不知道，不要编造答案。
 
-{context}
-
-问题：{question}
-答案："""
-PROMPT_ZH = PromptTemplate(
-    template=PROMPT_TEMPLATE_ZH, input_variables=["context", "question"]
-)
 # MODEL_NAME = "/Users/zeyesun/Documents/Data/models/bloomz-560m"
 # MODEL_NAME = "D:\\Data\\models\\chatglm2-6B-int4"
 MODEL_NAME = "D:\\Data\\models\\bloomz-560m"
@@ -128,8 +119,8 @@ block_css = """.importantButton {
 }"""
 
 webui_title = """
-# 🎉langchain-ChatGLM WebUI🎉
-👍 [https://github.com/imClumsyPanda/langchain-ChatGLM](https://github.com/imClumsyPanda/langchain-ChatGLM)
+# 🎉LLM Application WebUI🎉
+👍 [https://github.com/sunzeyeah/llm_application](https://github.com/sunzeyeah/llm_application)
 """
 # default_vs = get_vs_list()[0] if len(get_vs_list()) > 1 else "为空"
 init_message = f"""欢迎使用 LLM Application Web UI！
@@ -266,14 +257,9 @@ embedding_device = f"cuda:{LOCAL_RANK}" if torch.cuda.is_available() else "cpu"
 embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME,
                                    model_kwargs={'device': embedding_device})
 vector_store = Chroma(persist_directory=VECTOR_DIR, embedding_function=embeddings)
-chain_type_kwargs = {"prompt": PROMPT_ZH}
-# qa = VectorDBQA.from_chain_type(llm=self.llm, chain_type="stuff", vectorstore=self.vector_store,
-#                                 return_source_documents=True, chain_type_kwargs=chain_type_kwargs,
-#                                 verbose=self.verbose)
 retriever = vector_store.as_retriever(search_type=SEARCH_TYPE, search_kwargs={"k": K})
-qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever,
-                                 return_source_documents=True, chain_type_kwargs=chain_type_kwargs,
-                                 verbose=False)
+qa = FAQRetrievalQA.from_llm(llm=llm,  prompt=PROMPT_ZH, retriever=retriever,
+                             return_source_documents=True, verbose=False)
 model_status = """模型已成功加载，可以开始对话，或从右侧选择模式后开始对话"""
 
 flag_csv_logger = gr.CSVLogger()
