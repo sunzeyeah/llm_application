@@ -306,9 +306,10 @@ def get_answer(query, vs_path, history, mode, score_threshold: float = None,
         for resp in [result]:
             reply = "\n\n"
             source = [
-                f"""<details> <summary>出处：[{i + 1}] {os.path.split(doc.metadata["source"])[-1]}</summary>\n"""
-                f"""{doc.page_content}\n"""
-                f"""</details>"""
+                f"<details>" \
+                f"<summary>出处：[{i + 1}] {doc.page_content}</summary>\n" \
+                f"{doc.metadata['answer']}\n" \
+                f"</details>"
                 for i, doc in enumerate(resp["source_documents"])
             ]
             reply += "\n\n".join([f"问：{query}", f"答：{result['result']}"] + source)
