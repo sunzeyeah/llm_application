@@ -230,6 +230,12 @@ class ChatBot(Task):
             # 加载数据
             self.vector_store = Chroma(persist_directory=vector_dir, embedding_function=self.embeddings)
 
+    def _set_embeddings(self, embeddings: Embeddings):
+        self.embeddings = embeddings
+
+    def _set_vector_store(self, vector_store: VectorStore):
+        self.vector_store = vector_store
+
     def __call__(self,
                  query: str,
                  search_type: str = "similarity",

@@ -15,6 +15,10 @@ def set_seed(seed_val=42):
     torch.cuda.manual_seed_all(seed_val)
 
 
+def list_dir(path):
+    return [name for name in os.listdir(path) if os.path.isdir(os.path.join(path, name))]
+
+
 def rmdir(folder):
     ''' remove all the sub-directory and files within a folder, but does not remove the folder itself
 

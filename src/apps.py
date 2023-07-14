@@ -1,5 +1,9 @@
 
 import sys
+from typing import Dict
+
+from langchain.embeddings.base import Embeddings
+from langchain.llms.base import LLM
 
 sys.path.insert(0, "/root/autodl-tmp/Code/llm_application")
 sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/llm_application")
@@ -29,6 +33,7 @@ from src.tasks import (
     GoogleSearch,
     Summarization,
     ChatBot,
+    Task,
 )
 
 
@@ -68,7 +73,8 @@ def get_parser():
     # Task: ChatBot
     parser.add_argument("--embedding_name", type=str, default=None, help="openai or path to huggingface embedding"
                                                                          "embedding method to use")
-    parser.add_argument("--vector_dir", type=str, default=None, help="本地知识库的向量文件地址")
+    parser.add_argument("--vector_dir", type=str, default=None, help="本地知识库的向量文件根目录")
+    parser.add_argument("--kb_name", type=str, default="faq", help="知识库名称")
     parser.add_argument("--data_dir", type=str, default=None, help="本地知识库原始文件地址")
     parser.add_argument("--pattern", type=str, default=None, help="本地知识库的文件名pattern")
     parser.add_argument("--k", type=int, default=3, help="number of docs to recall for answering")
@@ -80,7 +86,7 @@ def get_parser():
     return args
 
 
-def init_llm(args):
+def init_llm(args) -> LLM:
     if args.mode == "openai_api":
         assert args.api_key is not None, "OPENAI_API_KEY required to init openai api llm"
         os.environ["OPENAI_API_KEY"] = args.api_key
@@ -207,7 +213,7 @@ def init_llm(args):
     return llm
 
 
-def init_task(args, llm):
+def init_task(args, llm: LLM, embeddings: Embeddings = None) -> Task:
     if args.task == "google_search":
         kwargs = {"serp_api_key": args.serp_api_key, "tools": ['serpapi']}
         task = GoogleSearch(llm=llm, language=args.language, verbose=args.verbose,
@@ -215,14 +221,15 @@ def init_task(args, llm):
     elif args.task == "summarization":
         task = Summarization(llm=llm, language=args.language, verbose=args.verbose)
     elif args.task == "chatbot":
-        if args.embedding_name == "openai":
-            embeddings = OpenAIEmbeddings()
-        else:
-            embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-            embeddings = HuggingFaceEmbeddings(model_name=args.embedding_name,
-                                               model_kwargs={'device': embedding_device})
+        if embeddings is None:
+            if args.embedding_name == "openai":
+                embeddings = OpenAIEmbeddings()
+            else:
+                embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+                embeddings = HuggingFaceEmbeddings(model_name=args.embedding_name,
+                                                   model_kwargs={'device': embedding_device})
         task = ChatBot(llm=llm, language=args.language, verbose=args.verbose,
-                       embeddings=embeddings, vector_dir=args.vector_dir,
+                       embeddings=embeddings, vector_dir=os.path.join(args.vector_dir, args.kb_name),
                        data_dir=args.data_dir, pattern=args.pattern,
                        chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap)
     else:
@@ -231,7 +238,7 @@ def init_task(args, llm):
     return task
 
 
-def task_input_params(args):
+def task_input_params(args) -> Dict:
     if args.task == "google_search":
         input_params = {
             "prompt": args.prompt
