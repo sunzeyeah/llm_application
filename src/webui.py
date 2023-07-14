@@ -103,6 +103,7 @@ args = {
     "search_type": "similarity",
     "k": 5,
     "search_threshold": 0.7,
+    "serp_api_key": None,
 }
 args = dotdict(args)
 llm_model_list = [
@@ -177,7 +178,10 @@ def initialize_task() -> str:
         task_status = f"""任务：{task_en_to_zh[args.task]}已成功加载，可以开始对话"""
     except Exception as e:
         logger.error(e)
-        task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}加载失败"""
+        if args.task == "google_search" and args.serp_api_key is None:
+            task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}默认使用Google，需要SERP_API_KEY，请在右侧输入框内进行输入"""
+        else:
+            task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}加载失败"""
         logger.warning(task_status)
 
     return task_status
@@ -310,7 +314,7 @@ def load_summarization_files(files: Union[File, List[File]],
            history + [[None, file_status]]
 
 
-def change_task(task: str, history: List[List[str]]) -> Tuple[Dict, Dict, Dict, List[List[str]]]:
+def change_task(task: str, history: List[List[str]]) -> Tuple[Dict, Dict, Dict, Dict, List[List[str]]]:
     global args
     args.task = task_zh_to_en[task]
     task_status = initialize_task()
@@ -318,9 +322,17 @@ def change_task(task: str, history: List[List[str]]) -> Tuple[Dict, Dict, Dict, 
         return gr.update(visible=True), \
                gr.update(visible=True), \
                gr.update(visible=False), \
+               gr.update(visible=False), \
                history + [[None, task_status]]
     elif task == "文本摘要":
         return gr.update(visible=False), \
+               gr.update(visible=False), \
+               gr.update(visible=True), \
+               gr.update(visible=False), \
+               history + [[None, task_status]]
+    elif task == "搜索引擎":
+        return gr.update(visible=False), \
+               gr.update(visible=False), \
                gr.update(visible=False), \
                gr.update(visible=True), \
                history + [[None, task_status]]
@@ -328,7 +340,17 @@ def change_task(task: str, history: List[List[str]]) -> Tuple[Dict, Dict, Dict, 
         return gr.update(visible=False), \
                gr.update(visible=False), \
                gr.update(visible=False), \
+               gr.update(visible=False), \
                history + [[None, task_status]]
+
+
+def init_search(api_key: str, history: List[List[str]]) -> List[List[str]]:
+    global args
+    args.serp_api_key = api_key
+    assert args.task == 'google_search'
+    task_status = initialize_task()
+
+    return history + [[None, task_status]]
 
 
 def get_answer(task: str,
@@ -377,7 +399,7 @@ def get_answer(task: str,
     flag_csv_logger.flag([query, history, task], username=FLAG_USER_NAME)
 
 
-# 初始化所有模型（LLM，Embeddings, Chain等）
+# 初始化所有模型（LLM, Embeddings, Chain等）
 llm_status = initialize_llm()
 task_status = initialize_task()
 
@@ -401,9 +423,10 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                 kb_params = gr.Accordion("【知识库问答】参数设定", visible=task_en_to_zh[default_task] == "知识库问答")
                 kb_setting = gr.Accordion("【知识库问答】修改知识库", visible=task_en_to_zh[default_task] == "知识库问答")
                 summarization_setting = gr.Accordion("【文本摘要】上传文件", visible=task_en_to_zh[default_task] == "文本摘要")
+                search_setting = gr.Accordion("【搜索引擎】API KEY", visible=task_en_to_zh[default_task] == "搜索引擎")
                 task.change(fn=change_task,
                             inputs=[task, chatbot],
-                            outputs=[kb_params, kb_setting, summarization_setting, chatbot])
+                            outputs=[kb_params, kb_setting, summarization_setting, search_setting, chatbot])
                 with kb_params:
                     args.search_threshold = gr.Number(value=args.search_threshold,
                                                       label="召回阈值：相似度超过该值的document才会被召回",
@@ -492,6 +515,16 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     #                          inputs=[select_kb, files_to_delete, chatbot],
                     #                          outputs=[files_to_delete, chatbot])
                     flag_csv_logger.setup([task, files, chatbot], "flagged")
+                with search_setting:
+                    serp_api_key_textbox = gr.Textbox(label="请输入SERP API KEY",
+                                                      lines=1,
+                                                      interactive=True,
+                                                      visible=True)
+                    serp_api_key_button = gr.Button(value="确认", visible=True)
+                    serp_api_key_button.click(fn=init_search,
+                                              inputs=[serp_api_key_textbox, chatbot],
+                                              outputs=chatbot)
+                    flag_csv_logger.setup([task, query, serp_api_key_textbox, chatbot], "flagged")
                 query.submit(get_answer,
                              [task, query, files, chatbot],
                              [chatbot, query])
