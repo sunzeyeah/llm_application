@@ -47,21 +47,28 @@ default_theme_args = dict(
 )
 flag_csv_logger = gr.CSVLogger()
 FLAG_USER_NAME: str = uuid.uuid4().hex
-task_list = [
-    # "搜索引擎",
-    # "文本摘要",
-    # "知识库问答",
-    "google_search",
-    "summarization",
-    "chatbot",
+task_list_zh = [
+    "搜索引擎",
+    "文本摘要",
+    "知识库问答",
 ]
-default_task = "chatbot"  # "知识库问答"
+task_en_to_zh = {
+    "google_search": "搜索引擎",
+    "summarization": "文本摘要",
+    "chatbot": "知识库问答",
+}
+task_zh_to_en = {
+    "搜索引擎": "google_search",
+    "文本摘要": "summarization",
+    "知识库问答": "chatbot",
+}
+default_task = "chatbot"
 default_llm_model = "bloomz-560M"
 default_embedding_name = "text2vec-large-chinese"
 default_kb_name = "test"
 init_message = f"""欢迎使用 LLM Application Web UI！
 
-请在右侧切换模式，目前支持3种功能：(1)搜索引擎 (2)文本摘要 (3)基于本地知识库的问答机器人
+请在右侧切换模式，目前支持{len(task_list_zh)}种功能：{" ".join([f"({i+1}) {t}" for i, t in enumerate(task_list_zh)])}
 
 第3个知识库问答模式中，需要预先将知识库转变为向量存储，然后选择知识库名称即可开始问答，当前知识库：{default_kb_name}。知识库暂不支持实时新增和修改。
 """
@@ -92,6 +99,7 @@ args = {
     "kb_name": default_kb_name,
     "search_type": "similarity",
     "k": 5,
+    "search_threshold": 0.7,
 }
 args = dotdict(args)
 llm_model_list = [
@@ -156,14 +164,12 @@ def reinit_model(llm_model: str,
                  embedding_model: str,
                  kb_name: str,
                  # llm_history_len, no_remote_model, use_ptuning_v2, use_lora,
-                 k: int,
                  history: List[List[str]]) -> List[List[str]]:
     global args
     try:
         model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
         args.model_name = os.path.join(model_dir, llm_model)
         args.embedding_name = os.path.join(model_dir, embedding_model)
-        args.k = k
         init_embeddings_and_vector_store(vector_dir=os.path.join(args.vector_dir, kb_name))
         init_llm_and_task()
         model_status = """模型已重新加载，可以开始对话，或从右侧选择模式后开始对话"""
@@ -291,16 +297,16 @@ def load_summarization_files(files: Union[File, List[File]],
            history + [[None, file_status]]
 
 
-def change_task(task: str, history: List[List[str]]) -> Tuple[Dict, Dict, List[List[str]]]:
+def change_task(task: str, history: List[List[str]]) -> Tuple[Dict, Dict, Dict, List[List[str]]]:
     global args
-    args.task = task
-    if task == "知识库问答" or task == "chatbot":
-        return gr.update(visible=True), gr.update(visible=False), history
+    args.task = task_zh_to_en[task]
+    if task == "知识库问答":
+        return gr.update(visible=True), gr.update(visible=True), gr.update(visible=False), history
         # + [[None, "【注意】：您已进入知识库问答模式，您输入的任何查询都将进行知识库查询，然后会自动整理知识库关联内容进入模型查询！！！"]]
-    elif task == "文本摘要" or task == "summarization":
-        return gr.update(visible=False), gr.update(visible=True), history
+    elif task == "文本摘要":
+        return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), history
     else:
-        return gr.update(visible=False), gr.update(visible=False), history
+        return gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), history
 
 
 def get_answer(task: str,
@@ -308,14 +314,14 @@ def get_answer(task: str,
                files: List[str],
                history: List[List[str]]) -> None:
     # logger.info(f"[get_answer] history: {history}")
-    if task == "搜索引擎" or task == "google_search":
+    if task == "搜索引擎":
         result = langchain_task(prompt=query)
         for resp in [result]:
             reply = "\n\n"
             reply += resp
             history[-1][-1] += reply
             yield history, ""
-    elif task == "文本摘要" or task == "summarization":
+    elif task == "文本摘要":
         for file in files:
             resp = langchain_task(input_file=file, chunk_size=args.chunk_size,
                                   chunk_overlap=args.chunk_overlap)
@@ -323,7 +329,7 @@ def get_answer(task: str,
             reply += resp
             history[-1][-1] += reply
             yield history, ""
-    elif task == "知识库问答" or task == "chatbot":
+    elif task == "知识库问答":
         result = langchain_task(query=query, search_type=args.search_type, k=args.k)
         # logger.info(f"query: {query}, result: {result}")
         for resp in [result]:
@@ -367,16 +373,29 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                 query = gr.Textbox(show_label=False,
                                    placeholder="请输入提问内容，按回车进行提交").style(container=False)
             with gr.Column(scale=5):
-                task = gr.Radio(task_list, label="请选择任务", value=default_task)
-                # knowledge_set = gr.Accordion("知识库设定", visible=False)
-                kb_setting = gr.Accordion("修改知识库")
-                summarization_setting = gr.Accordion("上传摘要文本")
+                task = gr.Radio(task_list_zh, label="请选择任务", value=task_en_to_zh[default_task])
+                kb_params = gr.Accordion("【知识库问答】参数设定")
+                kb_setting = gr.Accordion("【知识库问答】修改知识库")
+                summarization_setting = gr.Accordion("【文本摘要】上传文件")
                 task.change(fn=change_task,
                             inputs=[task, chatbot],
-                            outputs=[
-                                kb_setting,
-                                summarization_setting,
-                                chatbot])
+                            outputs=[kb_params, kb_setting, summarization_setting, chatbot])
+                with kb_params:
+                    args.search_threshold = gr.Number(value=args.search_threshold,
+                                                      label="知识库召回阈值：超过该值的document才会被召回",
+                                                      precision=1,
+                                                      interactive=True)
+                    args.k = gr.Number(value=args.k, precision=0,
+                                       label="召回知识库数量：每次最多召回的document数量", interactive=True)
+                    # chunk_conent = gr.Checkbox(value=False,
+                    #                            label="是否启用上下文关联",
+                    #                            interactive=True)
+                    args.chunk_size = gr.Number(value=args.chunk_size, precision=0,
+                                                label="上下文最大长度：单段内容的最大长度，超过该值会被切分为不同document",
+                                                interactive=True, visible=False)
+                    # chunk_conent.change(fn=change_chunk_conent,
+                    #                     inputs=[chunk_conent, gr.Textbox(value="chunk_conent", visible=False), chatbot],
+                    #                     outputs=[chunk_sizes, chatbot])
                 with kb_setting:
                     kb_refresh = gr.Button("更新已有知识库选项")
                     select_kb = gr.Dropdown(get_kb_list(),
@@ -384,7 +403,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                             interactive=True,
                                             value=get_kb_list()[0] if len(get_kb_list()) > 0 else None
                                             )
-                    kb_name = gr.Textbox(label="请输入知识库名称，当前知识库命名暂不支持中文",
+                    kb_name = gr.Textbox(label="请输入知识库名称（当前知识库命名暂不支持中文）",
                                          lines=1,
                                          interactive=True,
                                          visible=True)
@@ -404,8 +423,8 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                      outputs=[kb_name, kb_add, chatbot, kb_delete])
                     flag_csv_logger.setup([task, query, kb_name, chatbot], "flagged")
                 with summarization_setting:
-                    file_add = gr.Button(value="上传摘要文本", visible=True)
-                    file2kb = gr.Column(visible=False)
+                    file_add = gr.Button(value="上传文件", visible=True)
+                    file2kb = gr.Column(visible=True)
                     with file2kb:
                         #     # load_kb = gr.Button("加载知识库")
                         #     gr.Markdown("向知识库中添加文件")
@@ -444,9 +463,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     #                          outputs=[files_to_delete, chatbot])
                     flag_csv_logger.setup([task, files, chatbot], "flagged")
                 query.submit(get_answer,
-                             [task, query,
-                              files,
-                              chatbot],
+                             [task, query, files, chatbot],
                              [chatbot, query])
     # with gr.Tab("知识库测试 Beta"):
     #     with gr.Row():
@@ -553,6 +570,10 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                              label="LLM 模型",
                              value=default_llm_model,
                              interactive=True)
+        embedding_model = gr.Radio(embedding_model_list,
+                                   label="Embedding 模型",
+                                   value=default_embedding_name,
+                                   interactive=True)
         # no_remote_model = gr.Checkbox(shared.LoaderCheckPoint.no_remote_model,
         #                               label="加载本地模型",
         #                               interactive=True)
@@ -564,20 +585,21 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         # use_ptuning_v2 = gr.Checkbox(USE_PTUNING_V2,
         #                              label="使用p-tuning-v2微调过的模型",
         #                              interactive=True)
-        # use_lora = gr.Checkbox(USE_LORA,
-        #                        label="使用lora微调的权重",
-        #                        interactive=True)
-        embedding_model = gr.Radio(embedding_model_list,
-                                   label="Embedding 模型",
-                                   value=default_embedding_name,
-                                   interactive=True)
-        top_k = gr.Slider(1, 20, value=args.k, step=1,
-                          label="向量匹配 top k", interactive=True)
+        args.do_sample = gr.Checkbox(args.do_sample,
+                                     label="生成参数：do_sample",
+                                     interactive=True)
+        args.top_p = gr.Slider(0.0, 1.0, value=args.top_p, step=0.1,
+                               label="生成参数：top_p", interactive=True)
+        args.temperature = gr.Slider(0.0, 5.0, value=args.temperature, step=0.1,
+                                     label="生成参数：temperature", interactive=True)
+        args.repetition_penalty = gr.Slider(0.0, 5.0, value=args.repetition_penalty, step=0.1,
+                                            label="生成参数：repetition_penalty", interactive=True)
+
         load_model_button = gr.Button("重新加载模型")
         load_model_button.click(reinit_model, show_progress=True,
                                 inputs=[llm_model, embedding_model, llm_model,
                                         # llm_history_len, no_remote_model, use_ptuning_v2, use_lora,
-                                        top_k, chatbot],
+                                        chatbot],
                                 outputs=chatbot)
 
     demo.load(
