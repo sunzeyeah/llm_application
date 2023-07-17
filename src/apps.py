@@ -155,6 +155,7 @@ def init_llm(args) -> LLM:
             # set eop token
             if "chatglm2" in args.model_name:
                 tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
+            model.eval()
             # init huggingface pipeline
             pipe = ChatGLMTextGenerationPipeline(
                 model=model,
@@ -188,6 +189,7 @@ def init_llm(args) -> LLM:
                 st = torch.load(args.checkpoint, map_location="cpu")
                 model.load_state_dict(st)
                 del st
+            model.eval()
             # init huggingface pipeline
             pipe = pipeline(
                 "text-generation",

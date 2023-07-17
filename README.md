@@ -7,6 +7,10 @@
 - 问答机器人：基于本地知识库实现
 
 ## Usage
+支持2种交互方式：
+- Web UI：基于```gradio```实现
+- python脚本：直接运行python脚本
+
 支持4种方式初始化langchain LLM对象：
 1. OpenAI API：基于OpenAI的API
    - prerequisite-1：需要```OPENAI_API_KEY```，可在[OpenAI官网](https://platform.openai.com/account/api-keys) 申请
@@ -18,7 +22,38 @@
    - prerequisite：已搭建好自定义API
 4. Local：本地加载模型
 
-### 1. 搜索引擎
+### 1. Web UI
+```bash
+# 启动web
+python src/webui.py
+```
+#### 1.1 搜索引擎界面
+![search_image](./images/search.png)
+
+#### 1.2 文本摘要界面
+![summarization_image](./images/summarization.png)
+
+#### 1.3 问答机器人界面
+![chatbot_image](./images/chatbot.png)
+
+#### 1.4 LLM参数配置界面
+![model_config_image](./images/model_config.png)
+
+
+Web UI可实现如下功能：
+- ```对话```标签中可进行3类不同任务：搜索引擎、文本摘要、问答机器人，也支持对各种任务进行相应配置
+   - 搜索引擎：支持输入```SERP_API_KEY```
+   - 文本摘要：支持上传多个文件
+   - 问答机器人：支持修改相关参数（如：召回阈值、召回数量等）、切换不同向量数据库、新增向量数据库、删除向量数据库
+- ```模型配置```标签中可以切换LLM模型、切换Embeddings模型、修改LLM生成参数（如：```do_sample```, ```top_p```等）
+   
+
+
+
+**PS**: 目前Web UI仅支持local方式加载模型
+
+### 2. Python脚本
+#### 2.1 搜索引擎
 实现搜索引擎的功能。默认使用Google，需要在[SerpApi官网](https://serpapi.com/) 申请```SERPAPI_API_KEY```
 ```bash
 PROMPT="In what year was the film Departed with Leopnardo Dicaprio released?"
@@ -31,7 +66,7 @@ python src/apps.py \
   --prompt $PROMPT
 ```
 
-### 2. 文本摘要
+#### 2.2 文本摘要
 对外部文件生成相应的摘要。```INPUT_FILE```为需要生成摘要的外部文件
 ```bash
 # 基于OpenAI API
@@ -42,8 +77,8 @@ python src/apps.py \
   --input_file $INPUT_FILE
 ```
 
-### 3. 问答机器人
-基于本地知识库，构建问答机器人。 首先，需要使用embedding工具将知识库转换为向量，默认使用```langchain.embeddings.OpenAIEmbeddings```。然后，基于向量匹配查询后进行回答。
+#### 2.3 问答机器人
+基于本地知识库，构建问答机器人。 首先，使用embedding工具将知识库转换为向量，默认使用```langchain.embeddings.OpenAIEmbeddings```。然后，基于向量匹配查询后进行回答。
 
 ```DATA_DIR```为本地知识库的文件地址。```VECTOR_DIR```为知识库的向量文件地址，第一次计算后向量结果即会保存在该地址，后续可直接加载，无需重复计算。
 ```bash

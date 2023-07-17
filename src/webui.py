@@ -7,6 +7,7 @@ import os
 import shutil
 import gradio as gr
 import uuid
+import gc
 import torch
 from numba import cuda
 from typing import List, Dict, Tuple, Union
@@ -53,22 +54,22 @@ FLAG_USER_NAME: str = uuid.uuid4().hex
 task_list_zh = [
     "搜索引擎",
     "文本摘要",
-    "知识库问答",
+    "问答机器人",
 ]
 task_en_to_zh = {
     "google_search": "搜索引擎",
     "summarization": "文本摘要",
-    "chatbot": "知识库问答",
+    "chatbot": "问答机器人",
 }
 task_zh_to_en = {
     "搜索引擎": "google_search",
     "文本摘要": "summarization",
-    "知识库问答": "chatbot",
+    "问答机器人": "chatbot",
 }
 default_task = "chatbot"
-default_llm_model = "chatglm2-6B"
+default_llm_model = "bloomz-560m"
 default_embedding_name = "text2vec-large-chinese"
-default_kb_name = "faq"
+default_kb_name = "test"
 init_message = f"""欢迎使用 LLM Application Web UI！
 
 请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i+1}) {t}" for i, t in enumerate(task_list_zh)])}
@@ -83,8 +84,8 @@ init_message = f"""欢迎使用 LLM Application Web UI！
 args = {
     "mode": "local",
     "task": default_task,
-    "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
-    # "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
+    # "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
+    "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
     # "model_name": f"D:\\Data\\models\\{default_llm_model}",
     "local_rank": 0,
     "checkpoint": None,
@@ -97,10 +98,10 @@ args = {
     "repetition_penalty": 1.0,
     "chunk_size": 1024,
     "chunk_overlap": 0,
-    "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
-    "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}",
-    # "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
-    # "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
+    # "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
+    # "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}",
+    "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
+    "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
     # "vector_dir": "D:\\Data\\chatgpt\\output\\embeddings",
     # "embedding_name": f"D:\\Data\\models\\{default_embedding_name}",
     "kb_name": default_kb_name,
@@ -207,30 +208,41 @@ def update_model_params(
         history: List[List[str]]) -> List[List[str]]:
     global args
     global llm
+    global embeddings
+    global vector_store
     args.do_sample = do_sample
     args.top_p = top_p
     args.temperature = temperature
     args.repetition_penalty = repetition_penalty
 
-    # # release occupied GPU memory
-    # if torch.cuda.is_available() and args.local_rank >= 0:
-    #     cuda.select_device(args.local_rank)
-    #     cuda.close()
+    # release occupied GPU memory
+    if torch.cuda.is_available() and args.local_rank >= 0:
+        del llm.pipeline.model
+        del llm.pipeline.tokenizer
+        del embeddings
+        del vector_store
+        llm.pipeline.model = llm.pipeline.tokenizer = embeddings = vector_store = None
+        gc.collect()
+        with torch.cuda.device(f"cuda:{args.local_rank}"):
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        # cuda.select_device(args.local_rank)
+        # cuda.close()
 
     try:
-        # model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
-        # args.model_name = os.path.join(model_dir, llm_model)
-        # args.embedding_name = os.path.join(model_dir, embedding_model)
-        # # re-init embeddings and vector store
-        # kb_status = init_embeddings_and_vector_store(vector_dir=os.path.join(args.vector_dir, kb_name))
-        # logger.debug(kb_status)
+        model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
+        args.model_name = os.path.join(model_dir, llm_model)
+        args.embedding_name = os.path.join(model_dir, embedding_model)
+        # re-init embeddings and vector store
+        kb_status = init_embeddings_and_vector_store(vector_dir=os.path.join(args.vector_dir, kb_name))
+        logger.debug(kb_status)
         # re-init llm
-        # llm_status = initialize_llm()
-        # llm_status = kb_status + llm_status
-        llm.pipeline._forward_params.update({"do_sample": do_sample, "top_p": top_p,
-                                             "temperature": temperature, "repetition_penalty": repetition_penalty})
-        llm_status = f"LLM参数已更新，do_sample={do_sample}, top_p={top_p}, temperature={temperature}, " \
-                     f"repetition_penalty={repetition_penalty}"
+        llm_status = initialize_llm()
+        llm_status = kb_status + llm_status
+        # llm.pipeline._forward_params.update({"do_sample": do_sample, "top_p": top_p,
+        #                                      "temperature": temperature, "repetition_penalty": repetition_penalty})
+        # llm_status = f"LLM参数已更新，do_sample={do_sample}, top_p={top_p}, temperature={temperature}, " \
+        #              f"repetition_penalty={repetition_penalty}"
         logger.debug(llm_status)
     except Exception as e:
         llm_status = f"""【WARNING】LLM模型参数更新失败"""
@@ -248,8 +260,8 @@ def get_kb_list() -> List[str]:
     return kb_names
 
 
-def refresh_kb_list() -> Dict:
-    return gr.update(choices=get_kb_list())
+def refresh_kb_list() -> Tuple[Dict, Dict]:
+    return gr.update(choices=get_kb_list()), gr.update(choices=get_kb_list())
 
 
 def add_kb(kb_name: str, chatbot: List[List[str]]) -> Tuple[Dict, List[List[str]], Dict]:
@@ -361,7 +373,7 @@ def change_task(task: str, history: List[List[str]]) -> Tuple[Dict, Dict, Dict, 
     global args
     args.task = task_zh_to_en[task]
     task_status = initialize_task()
-    if task == "知识库问答":
+    if task == "问答机器人":
         return gr.update(visible=True), \
                gr.update(visible=True), \
                gr.update(visible=False), \
@@ -421,14 +433,15 @@ def get_answer(task: str,
             history[-1][-1] += reply
             yield history, ""
     elif task == "文本摘要":
+        reply = ""
         for file in files:
+            reply += "\n\n"
             resp = langchain_task(input_file=file.name, chunk_size=args.chunk_size,
                                   chunk_overlap=args.chunk_overlap)
-            reply = "\n\n"
             reply += resp
             history[-1][-1] += reply
             yield history, ""
-    elif task == "知识库问答":
+    elif task == "问答机器人":
         result = langchain_task(query=query, search_type=args.search_type, k=args.k)
         # logger.info(f"query: {query}, result: {result}")
         for resp in [result]:
@@ -475,8 +488,8 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                    placeholder="请输入提问内容，按回车进行提交").style(container=False)
             with gr.Column(scale=5):
                 task = gr.Radio(task_list_zh, label="请选择任务", value=task_en_to_zh[default_task])
-                kb_params = gr.Accordion("【知识库问答】参数设定", visible=task_en_to_zh[default_task] == "知识库问答")
-                kb_setting = gr.Accordion("【知识库问答】修改知识库", visible=task_en_to_zh[default_task] == "知识库问答")
+                kb_params = gr.Accordion("【问答机器人】参数设定", visible=task_en_to_zh[default_task] == "问答机器人")
+                kb_setting = gr.Accordion("【问答机器人】修改知识库", visible=task_en_to_zh[default_task] == "问答机器人")
                 summarization_setting = gr.Accordion("【文本摘要】上传文件", visible=task_en_to_zh[default_task] == "文本摘要")
                 search_setting = gr.Accordion("【搜索引擎】API KEY", visible=task_en_to_zh[default_task] == "搜索引擎")
                 task.change(fn=change_task,
@@ -508,17 +521,16 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                                      interactive=True,
                                                      value=default_kb_name)
                     kb_select_button = gr.Button("切换知识库")
-                    kb_add_textbox = gr.Textbox(label='请输入新增知识库的原始文件地址\n'
-                                                      '路径格式为：path/{kb_name}/*.jsonl\n'
-                                                      '文件每行的格式为：{"prompt": "", "label": ""}',
+                    kb_add_textbox = gr.Textbox(label='请输入新增知识库的原始文件地址',
+                                                info='路径格式：path/{kb_name}/*.jsonl，文件中每行的格式：{"prompt": "", "label": ""}）',
                                                 lines=1,
-                                                interactive=True,
-                                                visible=True)
-                    kb_add_button = gr.Button(value="新增知识库", visible=True)
+                                                interactive=True)
+                    kb_add_button = gr.Button(value="新增知识库")
                     kb_delete_dropdown = gr.Dropdown(get_kb_list(),
                                                      label="请选择要删除的知识库",
                                                      interactive=True,
-                                                     value=get_kb_list()[0] if len(get_kb_list()) > 0 else None)
+                                                     value=get_kb_list()[0] if len(get_kb_list()) > 0 else None,
+                                                     visible=True)
                     kb_delete_button = gr.Button("删除知识库", visible=True)
                     # select_kb.change(fn=reselect_kb,
                     #                  inputs=select_kb,
@@ -537,7 +549,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                            outputs=[kb_select_dropdown, chatbot, kb_delete_dropdown])
                     flag_csv_logger.setup([task, query, chatbot], "flagged")
                 with summarization_setting:
-                    file2kb = gr.Column(visible=True)
+                    file2kb = gr.Column()
                     with file2kb:
                         #     # load_kb = gr.Button("加载知识库")
                         #     gr.Markdown("向知识库中添加文件")
@@ -578,9 +590,8 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                 with search_setting:
                     serp_api_key_textbox = gr.Textbox(label="请输入SERP API KEY",
                                                       lines=1,
-                                                      interactive=True,
-                                                      visible=True)
-                    serp_api_key_button = gr.Button(value="确认", visible=True)
+                                                      interactive=True)
+                    serp_api_key_button = gr.Button(value="确认")
                     serp_api_key_button.click(fn=init_search,
                                               inputs=[serp_api_key_textbox, chatbot],
                                               outputs=chatbot)
@@ -588,117 +599,17 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                 query.submit(get_answer,
                              [task, chatbot, query, files],
                              [chatbot, query])
-    # with gr.Tab("知识库测试 Beta"):
-    #     with gr.Row():
-    #         with gr.Column(scale=10):
-    #             chatbot = gr.Chatbot([[None, knowledge_base_test_mode_info]],
-    #                                  elem_id="chat-box",
-    #                                  show_label=False).style(height=750)
-    #             query = gr.Textbox(show_label=False,
-    #                                placeholder="请输入提问内容，按回车进行提交").style(container=False)
-    #         with gr.Column(scale=5):
-    #             mode = gr.Radio(["知识库测试"],  # "知识库问答",
-    #                             label="请选择使用模式",
-    #                             value="知识库测试",
-    #                             visible=False)
-    #             knowledge_set = gr.Accordion("知识库设定", visible=True)
-    #             kb_setting = gr.Accordion("配置知识库", visible=True)
-    #             mode.change(fn=change_mode,
-    #                         inputs=[mode, chatbot],
-    #                         outputs=[kb_setting, knowledge_set, chatbot])
-    #             with knowledge_set:
-    #                 score_threshold = gr.Number(value=VECTOR_SEARCH_SCORE_THRESHOLD,
-    #                                             label="知识相关度 Score 阈值，分值越低匹配度越高",
-    #                                             precision=0,
-    #                                             interactive=True)
-    #                 vector_search_top_k = gr.Number(value=VECTOR_SEARCH_TOP_K, precision=0,
-    #                                                 label="获取知识库内容条数", interactive=True)
-    #                 chunk_conent = gr.Checkbox(value=False,
-    #                                            label="是否启用上下文关联",
-    #                                            interactive=True)
-    #                 chunk_sizes = gr.Number(value=CHUNK_SIZE, precision=0,
-    #                                         label="匹配单段内容的连接上下文后最大长度",
-    #                                         interactive=True, visible=False)
-    #                 chunk_conent.change(fn=change_chunk_conent,
-    #                                     inputs=[chunk_conent, gr.Textbox(value="chunk_conent", visible=False), chatbot],
-    #                                     outputs=[chunk_sizes, chatbot])
-    #             with kb_setting:
-    #                 kb_refresh = gr.Button("更新已有知识库选项")
-    #                 select_kb_test = gr.Dropdown(get_kb_list(),
-    #                                              label="请选择要加载的知识库",
-    #                                              interactive=True,
-    #                                              value=get_kb_list()[0] if len(get_kb_list()) > 0 else None)
-    #                 kb_name = gr.Textbox(label="请输入新建知识库名称，当前知识库命名暂不支持中文",
-    #                                      lines=1,
-    #                                      interactive=True,
-    #                                      visible=True)
-    #                 kb_add = gr.Button(value="添加至知识库选项", visible=True)
-    #                 file2kb = gr.Column(visible=False)
-    #                 with file2kb:
-    #                     # load_kb = gr.Button("加载知识库")
-    #                     gr.Markdown("向知识库中添加单条内容或文件")
-    #                     sentence_size = gr.Number(value=SENTENCE_SIZE, precision=0,
-    #                                               label="文本入库分句长度限制",
-    #                                               interactive=True, visible=True)
-    #                     with gr.Tab("上传文件"):
-    #                         files = gr.File(label="添加文件",
-    #                                         file_types=['.txt', '.md', '.docx', '.pdf'],
-    #                                         file_count="multiple",
-    #                                         show_label=False
-    #                                         )
-    #                         load_file_button = gr.Button("上传文件并加载知识库")
-    #                     with gr.Tab("上传文件夹"):
-    #                         folder_files = gr.File(label="添加文件",
-    #                                                # file_types=['.txt', '.md', '.docx', '.pdf'],
-    #                                                file_count="directory",
-    #                                                show_label=False)
-    #                         load_folder_button = gr.Button("上传文件夹并加载知识库")
-    #                     with gr.Tab("添加单条内容"):
-    #                         one_title = gr.Textbox(label="标题", placeholder="请输入要添加单条段落的标题", lines=1)
-    #                         one_conent = gr.Textbox(label="内容", placeholder="请输入要添加单条段落的内容", lines=5)
-    #                         one_content_segmentation = gr.Checkbox(value=True, label="禁止内容分句入库",
-    #                                                                interactive=True)
-    #                         load_conent_button = gr.Button("添加内容并加载知识库")
-    #                 # 将上传的文件保存到content文件夹下,并更新下拉框
-    #                 kb_refresh.click(fn=refresh_kb_list,
-    #                                  inputs=[],
-    #                                  outputs=select_kb_test)
-    #                 kb_add.click(fn=add_kb_name,
-    #                              inputs=[kb_name, chatbot],
-    #                              outputs=[select_kb_test, kb_name, kb_add, file2kb, chatbot])
-    #                 select_kb_test.change(fn=change_kb_name_input,
-    #                                       inputs=[select_kb_test, chatbot],
-    #                                       outputs=[kb_name, kb_add, file2kb, kb_path, chatbot])
-    #                 load_file_button.click(get_vector_store,
-    #                                        show_progress=True,
-    #                                        inputs=[select_kb_test, files, sentence_size, chatbot, kb_add, kb_add],
-    #                                        outputs=[kb_path, files, chatbot], )
-    #                 load_folder_button.click(get_vector_store,
-    #                                          show_progress=True,
-    #                                          inputs=[select_kb_test, folder_files, sentence_size, chatbot, kb_add,
-    #                                                  kb_add],
-    #                                          outputs=[kb_path, folder_files, chatbot], )
-    #                 load_conent_button.click(get_vector_store,
-    #                                          show_progress=True,
-    #                                          inputs=[select_kb_test, one_title, sentence_size, chatbot,
-    #                                                  one_conent, one_content_segmentation],
-    #                                          outputs=[kb_path, files, chatbot], )
-    #                 flag_csv_logger.setup([query, kb_path, chatbot, mode], "flagged")
-    #                 query.submit(get_answer,
-    #                              [query, kb_path, chatbot, mode, score_threshold, vector_search_top_k, chunk_conent,
-    #                               chunk_sizes],
-    #                              [chatbot, query])
     with gr.Tab("模型配置"):
         llm_model = gr.Radio(llm_model_list,
                              label="LLM 模型",
                              value=default_llm_model,
                              interactive=True,
-                             visible=False)
+                             visible=True)
         embedding_model = gr.Radio(embedding_model_list,
                                    label="Embedding 模型",
                                    value=default_embedding_name,
                                    interactive=True,
-                                   visible=False)
+                                   visible=True)
         do_sample_checkbox = gr.Checkbox(args.do_sample,
                                          label="生成参数：do_sample",
                                          interactive=True)
