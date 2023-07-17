@@ -10,6 +10,7 @@ import uuid
 import torch
 from numba import cuda
 from typing import List, Dict, Tuple, Union
+from tempfile import NamedTemporaryFile
 from gradio.inputs import File
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import Chroma, VectorStore
@@ -111,6 +112,9 @@ args = {
 args = dotdict(args)
 llm_model_list = [
     "chatglm2-6B",
+    "chatglm-6B",
+    "vicuna-7B-v1.1",
+    "baichuan-13B-chat",
     "bloomz-560M",
 ]
 embedding_model_list = [
@@ -130,9 +134,14 @@ def init_embeddings_and_vector_store(vector_dir: str,
     global embeddings
     global vector_store
     try:
+        # load embedding model
         embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
         embeddings = HuggingFaceEmbeddings(model_name=args.embedding_name,
                                            model_kwargs={'device': embedding_device})
+        # make directory (if vector_dir does not exist)
+        if not os.path.exists(vector_dir):
+            os.mkdir(vector_dir)
+        # init or load vector store
         if data_dir is not None:
             # 删除原embedding文件
             rmdir(vector_dir)
@@ -154,9 +163,8 @@ def init_embeddings_and_vector_store(vector_dir: str,
             vector_store = Chroma(persist_directory=vector_dir, embedding_function=embeddings)
             kb_status = f"""知识库：{os.path.basename(vector_dir)}已成功加载"""
     except Exception as e:
-        logger.error(e)
         kb_status = f"""【WARNING】知识库：{os.path.basename(vector_dir)}加载失败"""
-        logger.warning(kb_status)
+        logger.error(kb_status, e)
 
     return kb_status
 
@@ -167,9 +175,8 @@ def initialize_llm() -> str:
         llm = init_llm(args)
         llm_status = f"""LLM模型：{os.path.basename(args.model_name)}已成功加载"""
     except Exception as e:
-        logger.error(e)
         llm_status = f"""【WARNING】LLM模型：{os.path.basename(args.model_name)}加载失败，请到页面左上角"模型配置"选项卡中重新选择后点击"加载模型"按钮"""
-        logger.warning(llm_status)
+        logger.error(llm_status, e)
 
     return llm_status
 
@@ -180,51 +187,54 @@ def initialize_task() -> str:
         langchain_task = init_task(args, llm, embeddings)
         task_status = f"""任务：{task_en_to_zh[args.task]}已成功加载，可以开始对话"""
     except Exception as e:
-        logger.error(e)
         if args.task == "google_search" and args.serp_api_key is None:
             task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}默认使用Google，需要SERP_API_KEY，请在右侧输入框内进行输入"""
         else:
             task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}加载失败"""
-        logger.warning(task_status)
+        logger.error(task_status, e)
 
     return task_status
 
 
-def update_model_params(llm_model: str,
-                        embedding_model: str,
-                        kb_name: str,
-                        do_sample: bool,
-                        top_p: float,
-                        temperature: float,
-                        repetition_penalty: float,
-                        history: List[List[str]]) -> List[List[str]]:
+def update_model_params(
+        llm_model: str,
+        embedding_model: str,
+        kb_name: str,
+        do_sample: bool,
+        top_p: float,
+        temperature: float,
+        repetition_penalty: float,
+        history: List[List[str]]) -> List[List[str]]:
     global args
+    global llm
     args.do_sample = do_sample
     args.top_p = top_p
     args.temperature = temperature
     args.repetition_penalty = repetition_penalty
 
-    # release occupied GPU memory
-    if torch.cuda.is_available() and args.local_rank >= 0:
-        cuda.select_device(args.local_rank)
-        cuda.close()
+    # # release occupied GPU memory
+    # if torch.cuda.is_available() and args.local_rank >= 0:
+    #     cuda.select_device(args.local_rank)
+    #     cuda.close()
 
     try:
-        model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
-        args.model_name = os.path.join(model_dir, llm_model)
-        args.embedding_name = os.path.join(model_dir, embedding_model)
-        # re-init embeddings and vector store
-        kb_status = init_embeddings_and_vector_store(vector_dir=os.path.join(args.vector_dir, kb_name))
-        logger.debug(kb_status)
+        # model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
+        # args.model_name = os.path.join(model_dir, llm_model)
+        # args.embedding_name = os.path.join(model_dir, embedding_model)
+        # # re-init embeddings and vector store
+        # kb_status = init_embeddings_and_vector_store(vector_dir=os.path.join(args.vector_dir, kb_name))
+        # logger.debug(kb_status)
         # re-init llm
-        initialize_llm()
-        llm_status = f"""LLM模型成功更换为{llm_model}，Embedding模型成功更换为{embedding_model}，成功加载知识库：{kb_name}"""
+        # llm_status = initialize_llm()
+        # llm_status = kb_status + llm_status
+        llm.pipeline._forward_params.update({"do_sample": do_sample, "top_p": top_p,
+                                             "temperature": temperature, "repetition_penalty": repetition_penalty})
+        llm_status = f"LLM参数已更新，do_sample={do_sample}, top_p={top_p}, temperature={temperature}, " \
+                     f"repetition_penalty={repetition_penalty}"
         logger.debug(llm_status)
     except Exception as e:
-        logger.error(e)
-        llm_status = f"""【WARNING】LLM模型未更换为{llm_model}，Embedding模型未更换为{embedding_model}，
-        请到页面左上角"模型配置"选项卡中重新选择后点击"加载模型"按钮"""
-        logger.warning(llm_status)
+        llm_status = f"""【WARNING】LLM模型参数更新失败"""
+        logger.error(llm_status, e)
     return history + [[None, llm_status]]
 
 
@@ -233,7 +243,7 @@ def get_kb_list() -> List[str]:
         kb_names = list_dir(args.vector_dir)
         kb_names.sort()
     except Exception as e:
-        logger.warning("Failed to list kb", e)
+        logger.error("Failed to list kb", e)
         kb_names = []
     return kb_names
 
@@ -267,17 +277,32 @@ def add_kb(kb_name: str, chatbot: List[List[str]]) -> Tuple[Dict, List[List[str]
                gr.update(visible=True, choices=get_kb_list())
 
 
-def delete_kb(kb_name: str, chatbot: List[List[str]]) -> Tuple[Dict, List[List[str]], Dict]:
+def delete_kb(kb_to_delte: str, current_kb: str, chatbot: List[List[str]]) -> Tuple[Dict, List[List[str]], Dict]:
     try:
-        shutil.rmtree(os.path.join(args.vector_dir, kb_name))
-        kb_status = f"成功删除知识库：{kb_name}"
+        assert kb_to_delte != current_kb
+        # 删除知识库向量文件地址
+        shutil.rmtree(os.path.join(args.vector_dir, kb_to_delte))
+        kb_status = f"成功删除知识库：{kb_to_delte}"
         logger.info(kb_status)
+        # # 重新加载向量文件 (if necessary)
+        # kb_list = get_kb_list()
+        # if len(kb_list) > 0:
+        #     kb_first = kb_list[0]
+        #     kb_path = os.path.join(args.vector_dir, kb_first)
+        #     kb_status += "\n" + init_embeddings_and_vector_store(kb_path)
         chatbot = chatbot + [[None, kb_status]]
-        return gr.update(choices=get_kb_list()), \
+        return gr.update(choices=get_kb_list(), value=current_kb), \
                chatbot, \
-               gr.update(choices=get_kb_list())
+               gr.update(choices=get_kb_list(), value=current_kb)
+    except AssertionError as e:
+        kb_status = f"【WARNING】待删除知识库与当前使用中知识库相同，无法删除，请换成其他知识库"
+        logger.error(kb_status, e)
+        chatbot = chatbot + [[None, kb_status]]
+        return gr.update(visible=True), \
+               chatbot, \
+               gr.update(visible=True)
     except Exception as e:
-        kb_status = f"【WARNING】删除知识库：{kb_name}失败"
+        kb_status = f"【WARNING】删除知识库：{kb_to_delte}失败"
         logger.error(kb_status, e)
         chatbot = chatbot + [[None, kb_status]]
         return gr.update(visible=True), \
@@ -379,14 +404,14 @@ def update_kb_params(score: float,
     args.search_threshold = score
     args.k = k
     args.chunk_size = chunk_size
-    status = f"""知识库的召回阈值已修改为{score}, 召回数量已修改为{k}, 单段内容的最大长度(chunk_size)已修改为{chunk_size}"""
+    status = f"""知识库参数已更新，召回阈值={score}, 召回数量={k}, 单段内容的最大长度(chunk_size)={chunk_size}"""
     return history + [[None, status]]
 
 
 def get_answer(task: str,
                history: List[List[str]],
                query: str = None,
-               files: List[str] = None) -> None:
+               files: List[NamedTemporaryFile] = None) -> None:
     # logger.info(f"[get_answer] history: {history}")
     if task == "搜索引擎":
         result = langchain_task(prompt=query)
@@ -397,7 +422,7 @@ def get_answer(task: str,
             yield history, ""
     elif task == "文本摘要":
         for file in files:
-            resp = langchain_task(input_file=file, chunk_size=args.chunk_size,
+            resp = langchain_task(input_file=file.name, chunk_size=args.chunk_size,
                                   chunk_overlap=args.chunk_overlap)
             reply = "\n\n"
             reply += resp
@@ -426,7 +451,7 @@ def get_answer(task: str,
             history[-1][-1] = reply
             yield history, ""
     logger.info(f"flagging: username={FLAG_USER_NAME}, task={task}, query={query}, history={history}")
-    flag_csv_logger.flag([query, history, task], username=FLAG_USER_NAME)
+    flag_csv_logger.flag([task, query, history], username=FLAG_USER_NAME)
 
 
 # 初始化所有模型（LLM, Embeddings, Chain等）
@@ -458,34 +483,38 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                             inputs=[task, chatbot],
                             outputs=[kb_params, kb_setting, summarization_setting, search_setting, chatbot])
                 with kb_params:
-                    search_threshold_number = gr.Number(value=args.search_threshold,
-                                                        label="召回阈值：相似度超过该值的document才会被召回",
-                                                        precision=1,
-                                                        interactive=True)
-                    k_number = gr.Number(value=args.k, precision=0,
-                                         label="召回数量：每次最多召回的document数量", interactive=True)
+                    search_threshold_slider = gr.Slider(0.0, 1.0, value=args.search_threshold, step=0.1,
+                                                        label="召回阈值：相似度超过该值的document才会被召回", interactive=True)
+                    # search_threshold_number = gr.Number(value=args.search_threshold, minimum=0.0, maximum=1.0, precision=1,
+                    #                                     label="召回阈值：相似度超过该值的document才会被召回", interactive=True)
+                    # k_number = gr.Number(value=args.k, precision=0,
+                    #                      label="召回数量：每次最多召回的document数量", interactive=True)
+                    k_slider = gr.Slider(1, 10, value=args.k, step=1,
+                                         label="召回阈值：相似度超过该值的document才会被召回", interactive=True)
                     # chunk_conent = gr.Checkbox(value=False,
                     #                            label="是否启用上下文关联",
                     #                            interactive=True)
-                    chunk_size_number = gr.Number(value=args.chunk_size, precision=0,
-                                                  label="最大长度：单段内容的最大长度，超过该值会被切分为不同document",
-                                                  interactive=True)
+                    # chunk_size_number = gr.Number(value=args.chunk_size, precision=0, minimum=64, maximum=4096,
+                    #                               label="最大长度：单段内容的最大长度，超过该值会被切分为不同document", interactive=True)
+                    chunk_size_slider = gr.Slider(64, 4096, value=args.chunk_size, step=1,
+                                                  label="召回阈值：相似度超过该值的document才会被召回", interactive=True)
                     update_kb_params_button = gr.Button("更新知识库参数")
                     update_kb_params_button.click(fn=update_kb_params,
-                                                  inputs=[search_threshold_number, k_number, chunk_size_number, chatbot],
+                                                  inputs=[search_threshold_slider, k_slider, chunk_size_slider, chatbot],
                                                   outputs=chatbot)
                 with kb_setting:
                     kb_select_dropdown = gr.Dropdown(get_kb_list(),
                                                      label="请选择要加载的知识库",
                                                      interactive=True,
-                                                     value=get_kb_list()[0] if len(get_kb_list()) > 0 else None)
+                                                     value=default_kb_name)
                     kb_select_button = gr.Button("切换知识库")
-                    kb_add_textbox = gr.Textbox(label="请输入新增知识库的原始文件地址（如：path/*.txt）",
+                    kb_add_textbox = gr.Textbox(label='请输入新增知识库的原始文件地址\n'
+                                                      '路径格式为：path/{kb_name}/*.jsonl\n'
+                                                      '文件每行的格式为：{"prompt": "", "label": ""}',
                                                 lines=1,
                                                 interactive=True,
                                                 visible=True)
                     kb_add_button = gr.Button(value="新增知识库", visible=True)
-
                     kb_delete_dropdown = gr.Dropdown(get_kb_list(),
                                                      label="请选择要删除的知识库",
                                                      interactive=True,
@@ -504,7 +533,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     #                  inputs=delete_kb,
                     #                  outputs=delete_kb)
                     kb_delete_button.click(fn=delete_kb,
-                                           inputs=[kb_delete_dropdown, chatbot],
+                                           inputs=[kb_delete_dropdown, kb_select_dropdown, chatbot],
                                            outputs=[kb_select_dropdown, chatbot, kb_delete_dropdown])
                     flag_csv_logger.setup([task, query, chatbot], "flagged")
                 with summarization_setting:
@@ -545,7 +574,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     #                          show_progress=True,
                     #                          inputs=[select_kb, files_to_delete, chatbot],
                     #                          outputs=[files_to_delete, chatbot])
-                    flag_csv_logger.setup([task, files, chatbot], "flagged")
+                    # flag_csv_logger.setup([task, files, chatbot], "flagged")
                 with search_setting:
                     serp_api_key_textbox = gr.Textbox(label="请输入SERP API KEY",
                                                       lines=1,
@@ -555,7 +584,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     serp_api_key_button.click(fn=init_search,
                                               inputs=[serp_api_key_textbox, chatbot],
                                               outputs=chatbot)
-                    flag_csv_logger.setup([task, query, serp_api_key_textbox, chatbot], "flagged")
+                    # flag_csv_logger.setup([task, query, serp_api_key_textbox, chatbot], "flagged")
                 query.submit(get_answer,
                              [task, chatbot, query, files],
                              [chatbot, query])
@@ -663,22 +692,13 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         llm_model = gr.Radio(llm_model_list,
                              label="LLM 模型",
                              value=default_llm_model,
-                             interactive=True)
+                             interactive=True,
+                             visible=False)
         embedding_model = gr.Radio(embedding_model_list,
                                    label="Embedding 模型",
                                    value=default_embedding_name,
-                                   interactive=True)
-        # no_remote_model = gr.Checkbox(shared.LoaderCheckPoint.no_remote_model,
-        #                               label="加载本地模型",
-        #                               interactive=True)
-        # llm_history_len = gr.Slider(0, 10,
-        #                             value=LLM_HISTORY_LEN,
-        #                             step=1,
-        #                             label="LLM 对话轮数",
-        #                             interactive=True)
-        # use_ptuning_v2 = gr.Checkbox(USE_PTUNING_V2,
-        #                              label="使用p-tuning-v2微调过的模型",
-        #                              interactive=True)
+                                   interactive=True,
+                                   visible=False)
         do_sample_checkbox = gr.Checkbox(args.do_sample,
                                          label="生成参数：do_sample",
                                          interactive=True)
@@ -699,7 +719,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
     demo.load(
         fn=refresh_kb_list,
         inputs=None,
-        outputs=kb_select_dropdown,
+        outputs=[kb_select_dropdown, kb_delete_dropdown],
         queue=True,
     )
 
