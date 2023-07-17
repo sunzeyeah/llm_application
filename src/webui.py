@@ -1,7 +1,8 @@
 import sys
 
 sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/llm_application")
-sys.path.insert(0, "/Users/zeyesun/Documents/Code/llm_applications")
+sys.path.insert(0, "/Users/zeyesun/Documents/Code/llm_application")
+sys.path.insert(0, "D:\\Code\\llm_application")
 import os
 import shutil
 import gradio as gr
@@ -97,8 +98,8 @@ args = {
     # "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM/checkpoint/{default_embedding_name}",
     "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
     "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
-    # vector_dir = "D:\\Data\\chatgpt\\output\\embeddings"
-    # embedding_name = f"D:\\Data\\models\\{{default_embedding_name}}"
+    # "vector_dir": "D:\\Data\\chatgpt\\output\\embeddings",
+    # "embedding_name": f"D:\\Data\\models\\{default_embedding_name}",
     "kb_name": default_kb_name,
     "search_type": "similarity",
     "k": 5,
