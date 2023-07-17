@@ -8,6 +8,7 @@ import shutil
 import gradio as gr
 import uuid
 import torch
+from numba import cuda
 from typing import List, Dict, Tuple, Union
 from gradio.inputs import File
 from langchain.embeddings import HuggingFaceEmbeddings
@@ -64,9 +65,9 @@ task_zh_to_en = {
     "知识库问答": "chatbot",
 }
 default_task = "chatbot"
-default_llm_model = "bloomz-560M"
+default_llm_model = "chatglm2-6B"
 default_embedding_name = "text2vec-large-chinese"
-default_kb_name = "test"
+default_kb_name = "faq"
 init_message = f"""欢迎使用 LLM Application Web UI！
 
 请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i+1}) {t}" for i, t in enumerate(task_list_zh)])}
@@ -81,23 +82,24 @@ init_message = f"""欢迎使用 LLM Application Web UI！
 args = {
     "mode": "local",
     "task": default_task,
-    # "model_name": f"/mnt/pa002-28359-vol543625-share/LLM/checkpoint/{default_llm_model}",
-    "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
+    "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
+    # "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
     # "model_name": f"D:\\Data\\models\\{default_llm_model}",
     "local_rank": 0,
     "checkpoint": None,
     "bits": 16,
     "max_length_generation": 256,
     "do_sample": False,
+    "num_return_sequences": 1,
     "top_p": 0.9,
     "temperature": 0.9,
     "repetition_penalty": 1.0,
     "chunk_size": 1024,
     "chunk_overlap": 0,
-    # "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
-    # "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM/checkpoint/{default_embedding_name}",
-    "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
-    "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
+    "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
+    "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}",
+    # "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
+    # "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
     # "vector_dir": "D:\\Data\\chatgpt\\output\\embeddings",
     # "embedding_name": f"D:\\Data\\models\\{default_embedding_name}",
     "kb_name": default_kb_name,
@@ -188,18 +190,33 @@ def initialize_task() -> str:
     return task_status
 
 
-def reinit_model(llm_model: str,
-                 embedding_model: str,
-                 kb_name: str,
-                 # llm_history_len, no_remote_model, use_ptuning_v2, use_lora,
-                 history: List[List[str]]) -> List[List[str]]:
+def update_model_params(llm_model: str,
+                        embedding_model: str,
+                        kb_name: str,
+                        do_sample: bool,
+                        top_p: float,
+                        temperature: float,
+                        repetition_penalty: float,
+                        history: List[List[str]]) -> List[List[str]]:
     global args
+    args.do_sample = do_sample
+    args.top_p = top_p
+    args.temperature = temperature
+    args.repetition_penalty = repetition_penalty
+
+    # release occupied GPU memory
+    if torch.cuda.is_available() and args.local_rank >= 0:
+        cuda.select_device(args.local_rank)
+        cuda.close()
+
     try:
         model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
         args.model_name = os.path.join(model_dir, llm_model)
         args.embedding_name = os.path.join(model_dir, embedding_model)
+        # re-init embeddings and vector store
         kb_status = init_embeddings_and_vector_store(vector_dir=os.path.join(args.vector_dir, kb_name))
         logger.debug(kb_status)
+        # re-init llm
         initialize_llm()
         llm_status = f"""LLM模型成功更换为{llm_model}，Embedding模型成功更换为{embedding_model}，成功加载知识库：{kb_name}"""
         logger.debug(llm_status)
@@ -354,10 +371,22 @@ def init_search(api_key: str, history: List[List[str]]) -> List[List[str]]:
     return history + [[None, task_status]]
 
 
+def update_kb_params(score: float,
+                     k: int,
+                     chunk_size: int,
+                     history: List[List[str]]) -> List[List[str]]:
+    global args
+    args.search_threshold = score
+    args.k = k
+    args.chunk_size = chunk_size
+    status = f"""知识库的召回阈值已修改为{score}, 召回数量已修改为{k}, 单段内容的最大长度(chunk_size)已修改为{chunk_size}"""
+    return history + [[None, status]]
+
+
 def get_answer(task: str,
-               query: str,
-               files: List[str],
-               history: List[List[str]]) -> None:
+               history: List[List[str]],
+               query: str = None,
+               files: List[str] = None) -> None:
     # logger.info(f"[get_answer] history: {history}")
     if task == "搜索引擎":
         result = langchain_task(prompt=query)
@@ -429,21 +458,22 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                             inputs=[task, chatbot],
                             outputs=[kb_params, kb_setting, summarization_setting, search_setting, chatbot])
                 with kb_params:
-                    args.search_threshold = gr.Number(value=args.search_threshold,
-                                                      label="召回阈值：相似度超过该值的document才会被召回",
-                                                      precision=1,
-                                                      interactive=True)
-                    args.k = gr.Number(value=args.k, precision=0,
-                                       label="召回数量：每次最多召回的document数量", interactive=True)
+                    search_threshold_number = gr.Number(value=args.search_threshold,
+                                                        label="召回阈值：相似度超过该值的document才会被召回",
+                                                        precision=1,
+                                                        interactive=True)
+                    k_number = gr.Number(value=args.k, precision=0,
+                                         label="召回数量：每次最多召回的document数量", interactive=True)
                     # chunk_conent = gr.Checkbox(value=False,
                     #                            label="是否启用上下文关联",
                     #                            interactive=True)
-                    args.chunk_size = gr.Number(value=args.chunk_size, precision=0,
-                                                label="最大长度：单段内容的最大长度，超过该值会被切分为不同document",
-                                                interactive=True)
-                    # chunk_conent.change(fn=change_chunk_conent,
-                    #                     inputs=[chunk_conent, gr.Textbox(value="chunk_conent", visible=False), chatbot],
-                    #                     outputs=[chunk_sizes, chatbot])
+                    chunk_size_number = gr.Number(value=args.chunk_size, precision=0,
+                                                  label="最大长度：单段内容的最大长度，超过该值会被切分为不同document",
+                                                  interactive=True)
+                    update_kb_params_button = gr.Button("更新知识库参数")
+                    update_kb_params_button.click(fn=update_kb_params,
+                                                  inputs=[search_threshold_number, k_number, chunk_size_number, chatbot],
+                                                  outputs=chatbot)
                 with kb_setting:
                     kb_select_dropdown = gr.Dropdown(get_kb_list(),
                                                      label="请选择要加载的知识库",
@@ -527,7 +557,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                               outputs=chatbot)
                     flag_csv_logger.setup([task, query, serp_api_key_textbox, chatbot], "flagged")
                 query.submit(get_answer,
-                             [task, query, files, chatbot],
+                             [task, chatbot, query, files],
                              [chatbot, query])
     # with gr.Tab("知识库测试 Beta"):
     #     with gr.Row():
@@ -649,22 +679,22 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         # use_ptuning_v2 = gr.Checkbox(USE_PTUNING_V2,
         #                              label="使用p-tuning-v2微调过的模型",
         #                              interactive=True)
-        args.do_sample = gr.Checkbox(args.do_sample,
-                                     label="生成参数：do_sample",
-                                     interactive=True)
-        args.top_p = gr.Slider(0.0, 1.0, value=args.top_p, step=0.1,
-                               label="生成参数：top_p", interactive=True)
-        args.temperature = gr.Slider(0.0, 5.0, value=args.temperature, step=0.1,
-                                     label="生成参数：temperature", interactive=True)
-        args.repetition_penalty = gr.Slider(0.0, 5.0, value=args.repetition_penalty, step=0.1,
-                                            label="生成参数：repetition_penalty", interactive=True)
-
-        load_model_button = gr.Button("重新加载模型")
-        load_model_button.click(reinit_model, show_progress=True,
-                                inputs=[llm_model, embedding_model, kb_select_dropdown,
-                                        # llm_history_len, no_remote_model, use_ptuning_v2, use_lora,
-                                        chatbot],
-                                outputs=chatbot)
+        do_sample_checkbox = gr.Checkbox(args.do_sample,
+                                         label="生成参数：do_sample",
+                                         interactive=True)
+        top_p_slider = gr.Slider(0.0, 1.0, value=args.top_p, step=0.1,
+                                 label="生成参数：top_p", interactive=True)
+        temperature_slider = gr.Slider(0.0, 5.0, value=args.temperature, step=0.1,
+                                       label="生成参数：temperature", interactive=True)
+        repetition_penalty_slider = gr.Slider(0.0, 5.0, value=args.repetition_penalty, step=0.1,
+                                              label="生成参数：repetition_penalty", interactive=True)
+        update_model_params_button = gr.Button("更新参数并重新加载模型")
+        update_model_params_button.click(update_model_params,
+                                         show_progress=True,
+                                         inputs=[llm_model, embedding_model, kb_select_dropdown,
+                                                 do_sample_checkbox, top_p_slider, temperature_slider,
+                                                 repetition_penalty_slider, chatbot],
+                                         outputs=chatbot)
 
     demo.load(
         fn=refresh_kb_list,
@@ -674,7 +704,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
     )
 
 (demo
- .queue(concurrency_count=3)
+ .queue(concurrency_count=8)
  .launch(server_name='0.0.0.0',
          server_port=7860,
          show_api=False,

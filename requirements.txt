@@ -12,3 +12,4 @@ unstructured
 pdf2image
 chromadb
 gradio
+transformers_stream_generator
