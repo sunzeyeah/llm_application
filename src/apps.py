@@ -12,13 +12,7 @@ sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/llm_application")
 import os
 import argparse
 import torch
-from transformers import (
-    AutoTokenizer,
-    AutoModelForCausalLM,
-    pipeline,
-    AutoModelForSeq2SeqLM,
-    BitsAndBytesConfig
-)
+from transformers import pipeline
 from langchain.llms import (
     OpenAI,
     # HuggingFacePipeline,
@@ -26,7 +20,7 @@ from langchain.llms import (
 )
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 
-from src.utils.logger import logger
+from src.utils import logger, load
 from src.utils.file_utils import set_seed
 from src.llms import CustomAPI, ChatGLMTextGenerationPipeline, HuggingFacePipeline
 from src.tasks import (
@@ -115,98 +109,32 @@ def init_llm(args) -> LLM:
             top_p=args.top_p,
         )
     elif args.mode == "local":
-        device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        # load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-        # init bnb config for quantization
-        if torch.cuda.is_available():
-            bf16 = torch.cuda.get_device_capability()[0] >= 8
-            if bf16:
-                bnb_4bit_compute_dtype = torch.bfloat16
-            else:
-                bnb_4bit_compute_dtype = torch.float16
-        else:
-            bnb_4bit_compute_dtype = None
-        bnb_config = BitsAndBytesConfig(
-            load_in_8bit=args.bits == 8,
-            load_in_4bit=args.bits == 4,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
+        # load model and tokenizer
+        model, tokenizer, eos_token_id = load(
+            args,
+            # device_map={"": args.local_rank}
         )
-        # load model and init pipeline
+        # device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+        # init huggingface pipeline
         if "chatglm" in args.model_name:
-            # encoder model structure
-            if args.bits in [4, 8]:
-                model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name,
-                                                              use_cache=False,
-                                                              trust_remote_code=True,
-                                                              quantization_config=bnb_config,
-                                                              device_map={"": args.local_rank})
-            else:
-                model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name, trust_remote_code=True)
-                if torch.cuda.is_available() and args.local_rank >= 0:
-                    model = model.half()
-            # load checkpoint if available
-            if args.checkpoint is not None:
-                st = torch.load(args.checkpoint, map_location="cpu")
-                model.load_state_dict(st)
-                del st
-            # set eop token
-            if "chatglm2" in args.model_name:
-                tokenizer.eop_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
-            model.eval()
-            # init huggingface pipeline
-            pipe = ChatGLMTextGenerationPipeline(
-                model=model,
-                tokenizer=tokenizer,
-                device=device,
-                # device_map={"": args.local_rank} if torch.cuda.is_available() else None,
-                max_new_tokens=args.max_length_generation,
-                eos_token_id=tokenizer.eop_token_id,
-                pad_token_id=tokenizer.pad_token_id,
-                do_sample=args.do_sample,
-                num_return_sequences=args.num_return_sequences,
-                top_k=args.top_k,
-                top_p=args.top_p,
-                temperature=args.temperature,
-                repetition_penalty=args.repetition_penalty
-            )
+            pipeline_class = ChatGLMTextGenerationPipeline
         else:
-            # decoder model sturcture
-            if args.bits in [4, 8]:
-                model = AutoModelForCausalLM.from_pretrained(args.model_name,
-                                                             use_cache=False,
-                                                             trust_remote_code=True,
-                                                             quantization_config=bnb_config,
-                                                             device_map={"": args.local_rank})
-            else:
-                model = AutoModelForCausalLM.from_pretrained(args.model_name, use_cache=False, trust_remote_code=True)
-                if torch.cuda.is_available() and args.local_rank >= 0:
-                    model = model.half()
-            # load checkpoint if available
-            if args.checkpoint is not None:
-                st = torch.load(args.checkpoint, map_location="cpu")
-                model.load_state_dict(st)
-                del st
-            model.eval()
-            # init huggingface pipeline
-            pipe = pipeline(
-                "text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                device=device,
-                device_map={"": args.local_rank} if torch.cuda.is_available() else None,
-                max_new_tokens=args.max_length_generation,
-                # eos_token_id=tokenizer.bos_token_id,
-                eos_token_id=tokenizer.eos_token_id,
-                do_sample=args.do_sample,
-                num_return_sequences=args.num_return_sequences,
-                top_k=args.top_k,
-                top_p=args.top_p,
-                temperature=args.temperature,
-                repetition_penalty=args.repetition_penalty
-            )
+            pipeline_class = pipeline
+        pipe = pipeline_class(
+            model=model,
+            tokenizer=tokenizer,
+            # device=device,
+            # device_map={"": args.local_rank} if torch.cuda.is_available() else None,
+            max_new_tokens=args.max_length_generation,
+            eos_token_id=eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+            do_sample=args.do_sample,
+            num_return_sequences=args.num_return_sequences,
+            top_k=args.top_k,
+            top_p=args.top_p,
+            temperature=args.temperature,
+            repetition_penalty=args.repetition_penalty
+        )
         # init langchain llm from huggingface pipeline
         llm = HuggingFacePipeline(pipeline=pipe)
     else:

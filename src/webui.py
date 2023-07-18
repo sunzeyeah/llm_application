@@ -75,7 +75,7 @@ default_embedding_name = "text2vec-large-chinese"
 default_kb_name = "faq"
 init_message = f"""欢迎使用 LLM Application Web UI！
 
-请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i+1}) {t}" for i, t in enumerate(task_list_zh)])}
+请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i + 1}) {t}" for i, t in enumerate(task_list_zh)])}
 
 当前任务：{task_en_to_zh[default_task]}
 当前LLM模型：{default_llm_model}
@@ -431,6 +431,7 @@ def update_kb_params(score: float,
     return history + [[None, status]]
 
 
+@torch.no_grad()
 def get_answer(task: str,
                history: List[List[str]],
                query: str = None,
@@ -517,7 +518,8 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                                   label="召回阈值：相似度超过该值的document才会被召回", interactive=True)
                     update_kb_params_button = gr.Button("更新知识库参数")
                     update_kb_params_button.click(fn=update_kb_params,
-                                                  inputs=[search_threshold_slider, k_slider, chunk_size_slider, chatbot],
+                                                  inputs=[search_threshold_slider, k_slider, chunk_size_slider,
+                                                          chatbot],
                                                   outputs=chatbot)
                 with kb_setting:
                     kb_select_dropdown = gr.Dropdown(get_kb_list(),
