@@ -121,7 +121,7 @@ def load(args, device_map: Dict = None) -> Pipeline:
         model = AutoModelForSeq2SeqLM.from_config(config, trust_remote_code=True)
         params = load_params_8bit_or_4bit(args, model, device_map)
         model = model_class.from_pretrained(args.model_name,
-                                            use_cache=False,
+                                            # use_cache=False,
                                             trust_remote_code=True,
                                             **params)
         # model = model_class.from_pretrained(args.model_name,
@@ -131,7 +131,7 @@ def load(args, device_map: Dict = None) -> Pipeline:
         #                                               device_map={"": args.local_rank})
     else:
         model = model_class.from_pretrained(args.model_name,
-                                            use_cache=False,
+                                            # use_cache=False,
                                             trust_remote_code=True)
         if torch.cuda.is_available():
             if device_map is None:
