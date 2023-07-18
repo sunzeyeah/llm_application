@@ -238,7 +238,7 @@ def update_model_params(
         logger.debug(kb_status)
         # re-init llm
         llm_status = initialize_llm()
-        llm_status = kb_status + llm_status
+        llm_status = kb_status + "，" + llm_status
         # llm.pipeline._forward_params.update({"do_sample": do_sample, "top_p": top_p,
         #                                      "temperature": temperature, "repetition_penalty": repetition_penalty})
         # llm_status = f"LLM参数已更新，do_sample={do_sample}, top_p={top_p}, temperature={temperature}, " \
