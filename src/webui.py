@@ -71,8 +71,10 @@ task_zh_to_en = {
 }
 default_task = "chatbot"
 default_llm_model = "chatglm2-6B"
+# default_llm_model = "bloomz-560M"
 default_embedding_name = "text2vec-large-chinese"
 default_kb_name = "faq"
+# default_kb_name = "test"
 init_message = f"""欢迎使用 LLM Application Web UI！
 
 请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i + 1}) {t}" for i, t in enumerate(task_list_zh)])}
@@ -87,9 +89,9 @@ init_message = f"""欢迎使用 LLM Application Web UI！
 args = {
     "mode": "local",
     "task": default_task,
-    "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
-    # "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
-    # "model_name": f"D:\\Data\\models\\{default_llm_model}",
+    "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}" if sys.platform == "linux" or sys.platform == "linux2" else \
+                  f"/Users/zeyesun/Documents/Data/models/{default_llm_model}" if sys.platform == "darwin" else \
+                  f"D:\\Data\\models\\{default_llm_model}",
     "language": "zh",
     "verbose": True,
     "local_rank": 0,
@@ -101,14 +103,15 @@ args = {
     "top_p": 0.9,
     "temperature": 0.9,
     "repetition_penalty": 1.0,
+    "history_length": 0,
     "chunk_size": 1024,
     "chunk_overlap": 0,
-    "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
-    "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}",
-    # "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
-    # "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
-    # "vector_dir": "D:\\Data\\chatgpt\\output\\embeddings",
-    # "embedding_name": f"D:\\Data\\models\\{default_embedding_name}",
+    "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings" if sys.platform == "linux" or sys.platform == "linux2" else \
+                  "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings" if sys.platform == "darwin" else \
+                  "D:\\Data\\chatgpt\\output\\embeddings",
+    "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}" if sys.platform == "linux" or sys.platform == "linux2" else \
+                      f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}" if sys.platform == "darwin" else \
+                      f"D:\\Data\\models\\{default_embedding_name}",
     "kb_name": default_kb_name,
     "search_type": "similarity",
     "k": 5,
@@ -214,6 +217,7 @@ def update_model_params(
         top_p: float,
         temperature: float,
         repetition_penalty: float,
+        history_length: int,
         history: List[List[str]]) -> List[List[str]]:
     global args
     global llm
@@ -223,6 +227,7 @@ def update_model_params(
     args.top_p = top_p
     args.temperature = temperature
     args.repetition_penalty = repetition_penalty
+    args.history_length = history_length
 
     # release occupied GPU memory
     if torch.cuda.is_available() and args.local_rank >= 0:
@@ -463,7 +468,9 @@ def get_answer(task: str,
             history[-1][-1] += "\n\n" + reply
             yield history, ""
     else:
-        result = llm(query)
+        dialog_history = [h[1] for h in history if "问：" in h[1] and "答：" in h[1]]
+        logger.info(f"dialog_history: {dialog_history}")
+        result = llm(query, history=dialog_history)
         for resp in [result]:
             reply = f"问：{query}\n\n答：{resp}"
             history[-1][-1] += "\n\n" + reply
@@ -606,16 +613,16 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                              [task, chatbot, query, files],
                              [chatbot, query])
     with gr.Tab("模型配置"):
-        llm_model = gr.Radio(llm_model_list,
-                             label="LLM 模型",
-                             value=default_llm_model,
-                             interactive=True,
-                             visible=True)
-        embedding_model = gr.Radio(embedding_model_list,
-                                   label="Embedding 模型",
-                                   value=default_embedding_name,
-                                   interactive=True,
-                                   visible=True)
+        llm_model_dropdown = gr.Dropdown(llm_model_list,
+                                         label="LLM 模型",
+                                         value=default_llm_model,
+                                         interactive=True,
+                                         visible=True)
+        embedding_model_dropdown = gr.Dropdown(embedding_model_list,
+                                               label="Embedding 模型",
+                                               value=default_embedding_name,
+                                               interactive=True,
+                                               visible=True)
         do_sample_checkbox = gr.Checkbox(args.do_sample,
                                          label="生成参数：do_sample",
                                          interactive=True)
@@ -625,12 +632,15 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                        label="生成参数：temperature", interactive=True)
         repetition_penalty_slider = gr.Slider(0.0, 5.0, value=args.repetition_penalty, step=0.1,
                                               label="生成参数：repetition_penalty", interactive=True)
+        history_length_slider = gr.Slider(0, 10, value=args.history_length, step=1,
+                                          label="最大历史轮数：history_length",
+                                          info="目前仅用于闲聊任务和ChatGLM类模型", interactive=True)
         update_model_params_button = gr.Button("更新参数并重新加载模型")
         update_model_params_button.click(update_model_params,
                                          show_progress=True,
-                                         inputs=[llm_model, embedding_model, kb_select_dropdown,
+                                         inputs=[llm_model_dropdown, embedding_model_dropdown, kb_select_dropdown,
                                                  do_sample_checkbox, top_p_slider, temperature_slider,
-                                                 repetition_penalty_slider, chatbot],
+                                                 repetition_penalty_slider, history_length_slider, chatbot],
                                          outputs=chatbot)
 
     demo.load(

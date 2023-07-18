@@ -12,7 +12,6 @@ sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/llm_application")
 import os
 import argparse
 import torch
-from transformers import pipeline
 from langchain.llms import (
     OpenAI,
     # HuggingFacePipeline,
@@ -58,6 +57,7 @@ def get_parser():
     parser.add_argument("--top_p", type=float, default=0.8)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--repetition_penalty", type=float, default=1.0)
+    parser.add_argument("--history_length", type=int, default=0, help="Maximum round of history to append to prompt")
     # Task: Search
     parser.add_argument("--serp_api_key", type=str, default=None)
     # Task: Summarization
@@ -109,34 +109,13 @@ def init_llm(args) -> LLM:
             top_p=args.top_p,
         )
     elif args.mode == "local":
-        # load model and tokenizer
-        model, tokenizer, eos_token_id = load(
+        # load huggingface pipeline
+        pipeline = load(
             args,
             # device_map={"": args.local_rank}
         )
-        # device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        # init huggingface pipeline
-        if "chatglm" in args.model_name:
-            pipeline_class = ChatGLMTextGenerationPipeline
-        else:
-            pipeline_class = pipeline
-        pipe = pipeline_class(
-            model=model,
-            tokenizer=tokenizer,
-            # device=device,
-            # device_map={"": args.local_rank} if torch.cuda.is_available() else None,
-            max_new_tokens=args.max_length_generation,
-            eos_token_id=eos_token_id,
-            pad_token_id=tokenizer.pad_token_id,
-            do_sample=args.do_sample,
-            num_return_sequences=args.num_return_sequences,
-            top_k=args.top_k,
-            top_p=args.top_p,
-            temperature=args.temperature,
-            repetition_penalty=args.repetition_penalty
-        )
-        # init langchain llm from huggingface pipeline
-        llm = HuggingFacePipeline(pipeline=pipe)
+        # init langchain llm from
+        llm = HuggingFacePipeline(pipeline=pipeline)
     else:
         raise ValueError(f"Unsupported mode: {args.mode}")
 

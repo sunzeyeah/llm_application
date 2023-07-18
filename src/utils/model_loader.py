@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict
 import torch
 
 from transformers import (
@@ -6,10 +6,15 @@ from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
     AutoModelForSeq2SeqLM,
-    BitsAndBytesConfig, PreTrainedModel, PreTrainedTokenizer
+    BitsAndBytesConfig,
+    PreTrainedModel,
+    pipeline,
+    Pipeline
 )
 from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
 from accelerate.utils import get_balanced_memory
+
+from src.llms import ChatGLMTextGenerationPipeline
 
 
 def chatglm_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[str, int]:
@@ -87,7 +92,7 @@ def load_params_8bit_or_4bit(args, model: PreTrainedModel, device_map: Dict = No
     return params
 
 
-def load(args, device_map: Dict = None) -> Tuple[PreTrainedModel, PreTrainedTokenizer, int]:
+def load(args, device_map: Dict = None) -> Pipeline:
     # device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
@@ -147,4 +152,40 @@ def load(args, device_map: Dict = None) -> Tuple[PreTrainedModel, PreTrainedToke
 
     model.eval()
 
-    return model, tokenizer, eos_token_id
+    # init huggingface pipeline
+    if "chatglm" in args.model_name:
+        pipe = ChatGLMTextGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            # device=device,
+            # device_map={"": args.local_rank} if torch.cuda.is_available() else None,
+            max_new_tokens=args.max_length_generation,
+            eos_token_id=eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+            do_sample=args.do_sample,
+            num_return_sequences=args.num_return_sequences,
+            top_k=args.top_k,
+            top_p=args.top_p,
+            temperature=args.temperature,
+            repetition_penalty=args.repetition_penalty,
+            history_length=args.history_length,
+        )
+    else:
+        pipe = pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            # device=device,
+            # device_map={"": args.local_rank} if torch.cuda.is_available() else None,
+            max_new_tokens=args.max_length_generation,
+            eos_token_id=eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+            do_sample=args.do_sample,
+            num_return_sequences=args.num_return_sequences,
+            top_k=args.top_k,
+            top_p=args.top_p,
+            temperature=args.temperature,
+            repetition_penalty=args.repetition_penalty,
+        )
+
+    return pipe

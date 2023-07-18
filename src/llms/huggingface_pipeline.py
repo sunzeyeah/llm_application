@@ -35,6 +35,7 @@ class ChatGLMTextGenerationPipeline(TextGenerationPipeline):
         # if task=='text2text-generation', langchain.huggingface_pipeline will return only generated text,
         # if task=='text-generation', it will return full text including both prompt and generated text
         self.task = "text2text-generation"
+        self.history_length = kwargs.pop("history_length", None)
 
     def __call__(self, text_inputs, **kwargs):
         """
@@ -82,6 +83,8 @@ class ChatGLMTextGenerationPipeline(TextGenerationPipeline):
     def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):
         # get history
         history = generate_kwargs.get("history", [])
+        if self.history_length is not None and self.history_length > 0:
+            history = history[-self.history_length:-1]
         # concat history with current prompt_text
         prompt = ""
         for i, (old_query, response) in enumerate(history):
@@ -114,6 +117,8 @@ class ChatGLMTextGenerationPipeline(TextGenerationPipeline):
         return inputs
 
     def _forward(self, model_inputs, **generate_kwargs):
+        generate_kwargs.pop("history_length", None)
+        generate_kwargs.pop("history", None)
         input_ids = model_inputs["input_ids"]
         attention_mask = model_inputs.get("attention_mask", None)
         position_ids = model_inputs.get("position_ids", None)
@@ -353,8 +358,13 @@ class HuggingFacePipeline(LLM):
             run_manager: Optional[CallbackManagerForLLMRun] = None,
             **kwargs: Any,
     ) -> str:
-        response = self.pipeline(prompt)
-        logger.info(f"[HuggingfacePipeline] prompt: {prompt}\nresponse: {response}")
+        if isinstance(self.pipeline, ChatGLMTextGenerationPipeline):
+            history = kwargs.pop("history", [])
+            response = self.pipeline(prompt, history=history)
+            logger.info(f"[HuggingfacePipeline] history: {history}\nprompt: {prompt}\nresponse: {response}")
+        else:
+            response = self.pipeline(prompt)
+            logger.info(f"[HuggingfacePipeline] prompt: {prompt}\nresponse: {response}")
         if self.pipeline.task == "text-generation":
             # Text generation return includes the starter text.
             text = response[0]["generated_text"][len(prompt):]
