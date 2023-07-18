@@ -217,7 +217,10 @@ def init_llm(args) -> LLM:
 
 def init_task(args, llm: LLM, embeddings: Embeddings = None) -> Task:
     if args.task == "google_search":
-        kwargs = {"serp_api_key": args.serp_api_key, "tools": ['serpapi']}
+        kwargs = {
+            "serp_api_key": args.serp_api_key,
+            # "tools": ['serpapi']
+        }
         task = GoogleSearch(llm=llm, language=args.language, verbose=args.verbose,
                             **kwargs)
     elif args.task == "summarization":

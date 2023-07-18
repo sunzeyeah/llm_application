@@ -9,7 +9,7 @@ import gradio as gr
 import uuid
 import gc
 import torch
-from numba import cuda
+# from numba import cuda
 from typing import List, Dict, Tuple, Union
 from tempfile import NamedTemporaryFile
 from gradio.inputs import File
@@ -20,7 +20,7 @@ from langchain.embeddings.base import Embeddings
 from langchain.llms.base import LLM
 from langchain.text_splitter import CharacterTextSplitter
 
-from src.utils import logger, rmdir, list_dir
+from src.utils import logger, rmdir, list_dir, print_gpu_utilization
 from src.tasks.chatbot import FAQLoader
 from src.tasks import Task
 from src.apps import init_llm, init_task
@@ -87,6 +87,8 @@ args = {
     "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
     # "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
     # "model_name": f"D:\\Data\\models\\{default_llm_model}",
+    "language": "zh",
+    "verbose": True,
     "local_rank": 0,
     "checkpoint": None,
     "bits": 16,
@@ -113,6 +115,7 @@ args = {
 args = dotdict(args)
 llm_model_list = [
     "chatglm2-6B",
+    "chatglm2-6B-int4",
     "chatglm-6B",
     "vicuna-7B-v1.1",
     "baichuan-13B-chat",
@@ -217,6 +220,7 @@ def update_model_params(
 
     # release occupied GPU memory
     if torch.cuda.is_available() and args.local_rank >= 0:
+        print_gpu_utilization("before gpu release", args.local_rank, False)
         del llm.pipeline.model
         del llm.pipeline.tokenizer
         del embeddings
@@ -228,7 +232,7 @@ def update_model_params(
             torch.cuda.ipc_collect()
         # cuda.select_device(args.local_rank)
         # cuda.close()
-
+        print_gpu_utilization("after gpu release", args.local_rank, False)
     try:
         model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
         args.model_name = os.path.join(model_dir, llm_model)

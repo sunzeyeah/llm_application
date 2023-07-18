@@ -250,8 +250,10 @@ class ZHMRKLOutputParser(AgentOutputParser):
 class GoogleSearch(Task):
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.serp_api_key = kwargs.get("serp_api_key", None)
+        super().__init__(llm=kwargs.pop("llm"),
+                         languange=kwargs.pop("language", "zh"),
+                         verbose=kwargs.pop("verbose", True))
+        self.serp_api_key = kwargs.pop("serp_api_key", None)
         os.environ["SERPAPI_API_KEY"] = self.serp_api_key
         self.prefix = PREFIX_ZH if self.language == "zh" else PREFIX_EN
         self.suffix = SUFFIX_ZH if self.language == "zh" else PREFIX_EN

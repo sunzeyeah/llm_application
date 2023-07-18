@@ -5,6 +5,8 @@ import random
 import numpy as np
 import torch
 
+from pynvml import *
+
 from src.utils.logger import logger
 
 
@@ -34,3 +36,15 @@ def rmdir(folder):
                 shutil.rmtree(file_path)
         except Exception as e:
             logger.warn('Failed to delete %s. Reason: %s' % (file_path, e))
+
+
+def print_gpu_utilization(prefix: str = "", index: int = 0, only_rank_0: bool = True):
+    nvmlInit()
+    handle = nvmlDeviceGetHandleByIndex(index)
+    info = nvmlDeviceGetMemoryInfo(handle)
+    memory_used = info.used / 1024**3
+    if only_rank_0:
+        if index == 0:
+            logger.info(f"[{prefix}] GPU-{index} memory occupied: {memory_used:.2f} GB")
+    else:
+        logger.info(f"[{prefix}] GPU-{index} memory occupied: {memory_used:.2f} GB")
