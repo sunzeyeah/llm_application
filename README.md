@@ -36,21 +36,21 @@ python src/webui.py
 #### 1.3 问答机器人界面
 ![chatbot_image](./images/chatbot.png)
 
-#### 1.4 LLM参数配置界面
+#### 1.4 闲聊界面
+![chitchat_image](./images/chitchat.png)
+
+#### 1.5 LLM参数配置界面
 ![model_config_image](./images/model_config.png)
 
-
 Web UI可实现如下功能：
-- ```对话```标签中可进行3类不同任务：搜索引擎、文本摘要、问答机器人，也支持对各种任务进行相应配置
+- ```对话```标签中可进行4类不同任务：搜索引擎、文本摘要、问答机器人、闲聊，也支持对各种任务进行相应配置
    - 搜索引擎：支持输入```SERP_API_KEY```
    - 文本摘要：支持上传多个文件
    - 问答机器人：支持修改相关参数（如：召回阈值、召回数量等）、切换不同向量数据库、新增向量数据库、删除向量数据库
 - ```模型配置```标签中可以切换LLM模型、切换Embeddings模型、修改LLM生成参数（如：```do_sample```, ```top_p```等）
-   
-
-
 
 **PS**: 目前Web UI仅支持local方式加载模型
+
 
 ### 2. Python脚本
 #### 2.1 搜索引擎

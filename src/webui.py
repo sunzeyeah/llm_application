@@ -55,21 +55,24 @@ task_list_zh = [
     "搜索引擎",
     "文本摘要",
     "问答机器人",
+    "闲聊",
 ]
 task_en_to_zh = {
     "google_search": "搜索引擎",
     "summarization": "文本摘要",
     "chatbot": "问答机器人",
+    "chitchat": "闲聊",
 }
 task_zh_to_en = {
     "搜索引擎": "google_search",
     "文本摘要": "summarization",
     "问答机器人": "chatbot",
+    "闲聊": "chitchat",
 }
 default_task = "chatbot"
-default_llm_model = "chatglm2-6B"
+default_llm_model = "bloomz-560M"
 default_embedding_name = "text2vec-large-chinese"
-default_kb_name = "faq"
+default_kb_name = "test"
 init_message = f"""欢迎使用 LLM Application Web UI！
 
 请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i+1}) {t}" for i, t in enumerate(task_list_zh)])}
@@ -84,8 +87,8 @@ init_message = f"""欢迎使用 LLM Application Web UI！
 args = {
     "mode": "local",
     "task": default_task,
-    "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
-    # "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
+    # "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
+    "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
     # "model_name": f"D:\\Data\\models\\{default_llm_model}",
     "language": "zh",
     "verbose": True,
@@ -100,10 +103,10 @@ args = {
     "repetition_penalty": 1.0,
     "chunk_size": 1024,
     "chunk_overlap": 0,
-    "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
-    "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}",
-    # "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
-    # "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
+    # "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
+    # "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}",
+    "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
+    "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
     # "vector_dir": "D:\\Data\\chatgpt\\output\\embeddings",
     # "embedding_name": f"D:\\Data\\models\\{default_embedding_name}",
     "kb_name": default_kb_name,
@@ -191,7 +194,9 @@ def initialize_task() -> str:
         langchain_task = init_task(args, llm, embeddings)
         task_status = f"""任务：{task_en_to_zh[args.task]}已成功加载，可以开始对话"""
     except Exception as e:
-        if args.task == "google_search" and args.serp_api_key is None:
+        if args.task == "chitchat":
+            task_status = f"""任务：{task_en_to_zh[args.task]}已成功加载，可以开始对话"""
+        elif args.task == "google_search" and args.serp_api_key is None:
             task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}默认使用Google，需要SERP_API_KEY，请在右侧输入框内进行输入"""
             logger.warning(task_status)
         else:
@@ -234,6 +239,7 @@ def update_model_params(
         # cuda.select_device(args.local_rank)
         # cuda.close()
         print_gpu_utilization("after gpu release", args.local_rank, False)
+
     try:
         model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
         args.model_name = os.path.join(model_dir, llm_model)
@@ -431,26 +437,20 @@ def get_answer(task: str,
                files: List[NamedTemporaryFile] = None) -> None:
     if task == "搜索引擎":
         result = langchain_task(prompt=query)
-        reply = query
         for resp in [result]:
-            reply += "\n\n"
-            reply += resp
-            history[-1][-1] += reply
+            reply = f"问：{query}\n\n答：{resp}"
+            history[-1][-1] += "\n\n" + reply
             yield history, ""
     elif task == "文本摘要":
-        reply = ""
         for file in files:
-            reply += "\n\n"
             resp = langchain_task(input_file=file.name, chunk_size=args.chunk_size,
                                   chunk_overlap=args.chunk_overlap)
-            reply += resp
-            history[-1][-1] += reply
+            reply = f"摘要：{resp}"
+            history[-1][-1] += "\n\n" + reply
             yield history, ""
     elif task == "问答机器人":
         result = langchain_task(query=query, search_type=args.search_type, k=args.k)
-        # logger.info(f"query: {query}, result: {result}")
         for resp in [result]:
-            reply = "\n\n"
             source = [
                 f"<details>" \
                 f"<summary>出处：[{i + 1}] {doc.page_content}</summary>\n" \
@@ -458,15 +458,14 @@ def get_answer(task: str,
                 f"</details>"
                 for i, doc in enumerate(resp["source_documents"])
             ]
-            reply += "\n\n".join([f"问：{query}", f"答：{result['result']}"] + source)
-            history[-1][-1] += reply
+            reply = "\n\n".join([f"问：{query}", f"答：{result['result']}"] + source)
+            history[-1][-1] += "\n\n" + reply
             yield history, ""
     else:
         result = llm(query)
         for resp in [result]:
-            reply = "\n\n"
-            reply += resp
-            history[-1][-1] = reply
+            reply = f"问：{query}\n\n答：{resp}"
+            history[-1][-1] += "\n\n" + reply
             yield history, ""
     logger.info(f"flagging: username={FLAG_USER_NAME}, task={task}, query={query}, history={history}")
     flag_csv_logger.flag([task, query, history], username=FLAG_USER_NAME)

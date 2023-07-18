@@ -97,4 +97,4 @@ class Summarization(Task):
                                          prompt=self.prompt)
 
         # 执行总结链，（为了快速演示，只总结前5段）
-        return chain.run(split_documents[:5])
+        return chain.run(split_documents)
