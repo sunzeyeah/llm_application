@@ -9,7 +9,7 @@ import gradio as gr
 import uuid
 import gc
 import torch
-# from numba import cuda
+import re
 from typing import List, Dict, Tuple, Union
 from tempfile import NamedTemporaryFile
 from gradio.inputs import File
@@ -445,14 +445,14 @@ def get_answer(task: str,
         result = langchain_task(prompt=query)
         for resp in [result]:
             reply = f"问：{query}\n\n答：{resp}"
-            history[-1][-1] += "\n\n" + reply
+            history.append([None, reply])
             yield history, ""
     elif task == "文本摘要":
         for file in files:
             resp = langchain_task(input_file=file.name, chunk_size=args.chunk_size,
                                   chunk_overlap=args.chunk_overlap)
             reply = f"摘要：{resp}"
-            history[-1][-1] += "\n\n" + reply
+            history.append([None, reply])
             yield history, ""
     elif task == "问答机器人":
         result = langchain_task(query=query, search_type=args.search_type, k=args.k)
@@ -465,11 +465,26 @@ def get_answer(task: str,
                 for i, doc in enumerate(resp["source_documents"])
             ]
             reply = "\n\n".join([f"问：{query}", f"答：{result['result']}"] + source)
-            history[-1][-1] += "\n\n" + reply
+            history.append([None, reply])
             yield history, ""
     else:
-        dialog_history = [h[1] for h in history if "问：" in h[1] and "答：" in h[1]]
-        logger.info(f"dialog_history: {dialog_history}")
+        # only select the most recent chitchat history, search or chatbot history is not selected
+        pattern = r"(.*?)问：[\s]*(.*?)答：[\s]*(.*)"
+        for idx in range(len(history)-1, -1, -1):
+            _, text = history[idx]
+            if "闲聊已成功加载" in text:
+                break
+        else:
+            idx = len(history)
+        dialog_history = []
+        for i in range(idx, len(history)):
+            _, text = history[i]
+            match = re.search(pattern, text, re.DOTALL)
+            if match:
+                old_query = match.group(2).strip()
+                old_reponse = match.group(3).strip()
+                dialog_history.append((old_query, old_reponse))
+        logger.debug(f"dialog_history: {dialog_history}")
         result = llm(query, history=dialog_history)
         for resp in [result]:
             reply = f"问：{query}\n\n答：{resp}"

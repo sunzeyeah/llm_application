@@ -84,7 +84,9 @@ class ChatGLMTextGenerationPipeline(TextGenerationPipeline):
         # get history
         history = generate_kwargs.get("history", [])
         if self.history_length is not None and self.history_length > 0:
-            history = history[-self.history_length:-1]
+            history = history[-self.history_length:]
+        else:
+            history = []
         # concat history with current prompt_text
         prompt = ""
         for i, (old_query, response) in enumerate(history):
