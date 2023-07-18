@@ -145,7 +145,7 @@ def init_llm(args) -> LLM:
                                                               device_map={"": args.local_rank})
             else:
                 model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name, trust_remote_code=True)
-                if args.local_rank >= 0:
+                if torch.cuda.is_available() and args.local_rank >= 0:
                     model = model.half()
             # load checkpoint if available
             if args.checkpoint is not None:
@@ -182,7 +182,7 @@ def init_llm(args) -> LLM:
                                                              device_map={"": args.local_rank})
             else:
                 model = AutoModelForCausalLM.from_pretrained(args.model_name, use_cache=False, trust_remote_code=True)
-                if args.local_rank >= 0:
+                if torch.cuda.is_available() and args.local_rank >= 0:
                     model = model.half()
             # load checkpoint if available
             if args.checkpoint is not None:

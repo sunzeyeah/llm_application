@@ -193,9 +193,10 @@ def initialize_task() -> str:
     except Exception as e:
         if args.task == "google_search" and args.serp_api_key is None:
             task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}默认使用Google，需要SERP_API_KEY，请在右侧输入框内进行输入"""
+            logger.warning(task_status)
         else:
             task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}加载失败"""
-        logger.error(task_status, e)
+            logger.error(task_status, e)
 
     return task_status
 
@@ -428,11 +429,11 @@ def get_answer(task: str,
                history: List[List[str]],
                query: str = None,
                files: List[NamedTemporaryFile] = None) -> None:
-    # logger.info(f"[get_answer] history: {history}")
     if task == "搜索引擎":
         result = langchain_task(prompt=query)
+        reply = query
         for resp in [result]:
-            reply = "\n\n"
+            reply += "\n\n"
             reply += resp
             history[-1][-1] += reply
             yield history, ""

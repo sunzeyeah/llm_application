@@ -206,7 +206,8 @@ class ZHMRKLOutputParser(AgentOutputParser):
             if includes_answer:
                 raise OutputParserException(
                     "Parsing LLM output produced both a final answer "
-                    f"and a parse-able action: {text}"
+                    f"and a parse-able action: {text}",
+                    llm_output=text
                 )
             action = action_match.group(1).strip()
             action_input = action_match.group(2)
@@ -240,7 +241,10 @@ class ZHMRKLOutputParser(AgentOutputParser):
                 send_to_llm=True,
             )
         else:
-            raise OutputParserException(f"Could not parse LLM output: `{text}`")
+            raise OutputParserException(
+                f"Could not parse LLM output: `{text}`",
+                llm_output=text
+            )
 
     @property
     def _type(self) -> str:
@@ -253,7 +257,7 @@ class GoogleSearch(Task):
         super().__init__(llm=kwargs.pop("llm"),
                          languange=kwargs.pop("language", "zh"),
                          verbose=kwargs.pop("verbose", True))
-        self.serp_api_key = kwargs.pop("serp_api_key", None)
+        self.serp_api_key = kwargs.pop("serp_api_key")
         os.environ["SERPAPI_API_KEY"] = self.serp_api_key
         self.prefix = PREFIX_ZH if self.language == "zh" else PREFIX_EN
         self.suffix = SUFFIX_ZH if self.language == "zh" else PREFIX_EN
@@ -297,4 +301,12 @@ class GoogleSearch(Task):
                  prompt: str,
                  **kwargs: Any) -> str:
         """Run Agent"""
-        return self.agent.run(prompt)
+        try:
+            result = self.agent.run(prompt)
+        except OutputParserException as e:
+            if e.observation is not None:
+                result = f"【Error】{str(e)}. {e.observation}\n【Model Output】{e.llm_output}"
+            else:
+                result = f"【Error】{str(e)}\n【Model Output】{e.llm_output}"
+
+        return result
