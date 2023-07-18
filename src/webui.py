@@ -70,9 +70,9 @@ task_zh_to_en = {
     "闲聊": "chitchat",
 }
 default_task = "chatbot"
-default_llm_model = "bloomz-560M"
+default_llm_model = "chatglm2-6B"
 default_embedding_name = "text2vec-large-chinese"
-default_kb_name = "test"
+default_kb_name = "faq"
 init_message = f"""欢迎使用 LLM Application Web UI！
 
 请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i+1}) {t}" for i, t in enumerate(task_list_zh)])}
@@ -87,8 +87,8 @@ init_message = f"""欢迎使用 LLM Application Web UI！
 args = {
     "mode": "local",
     "task": default_task,
-    # "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
-    "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
+    "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}",
+    # "model_name": f"/Users/zeyesun/Documents/Data/models/{default_llm_model}",
     # "model_name": f"D:\\Data\\models\\{default_llm_model}",
     "language": "zh",
     "verbose": True,
@@ -103,10 +103,10 @@ args = {
     "repetition_penalty": 1.0,
     "chunk_size": 1024,
     "chunk_overlap": 0,
-    # "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
-    # "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}",
-    "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
-    "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
+    "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
+    "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}",
+    # "vector_dir": "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings",
+    # "embedding_name": f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}",
     # "vector_dir": "D:\\Data\\chatgpt\\output\\embeddings",
     # "embedding_name": f"D:\\Data\\models\\{default_embedding_name}",
     "kb_name": default_kb_name,
