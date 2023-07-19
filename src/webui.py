@@ -127,6 +127,8 @@ llm_model_list = [
     "vicuna-7B-v1.1",
     "baichuan-13B-chat",
     "bloomz-560M",
+    "llama-7B",
+    "llama-13B",
 ]
 embedding_model_list = [
     "text2vec-large-chinese",
@@ -214,6 +216,8 @@ def update_model_params(
         llm_model: str,
         embedding_model: str,
         kb_name: str,
+        bits: int,
+        max_length_generation: int,
         do_sample: bool,
         top_p: float,
         temperature: float,
@@ -224,6 +228,8 @@ def update_model_params(
     global llm
     global embeddings
     global vector_store
+    args.bits = bits
+    args.max_length_generation = max_length_generation
     args.do_sample = do_sample
     args.top_p = top_p
     args.temperature = temperature
@@ -232,19 +238,19 @@ def update_model_params(
 
     # release occupied GPU memory
     if torch.cuda.is_available() and args.local_rank >= 0:
-        print_gpu_utilization("before gpu release", args.local_rank, False)
+        # print_gpu_utilization("before gpu release", args.local_rank, False)
         del llm.pipeline.model
         del llm.pipeline.tokenizer
         del embeddings
         del vector_store
         llm.pipeline.model = llm.pipeline.tokenizer = embeddings = vector_store = None
         gc.collect()
-        with torch.cuda.device(f"cuda:{args.local_rank}"):
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
+        # with torch.cuda.device(f"cuda:{args.local_rank}"):
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
         # cuda.select_device(args.local_rank)
         # cuda.close()
-        print_gpu_utilization("after gpu release", args.local_rank, False)
+        # print_gpu_utilization("after gpu release", args.local_rank, False)
 
     try:
         model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
@@ -639,6 +645,12 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                                value=default_embedding_name,
                                                interactive=True,
                                                visible=True)
+        bits_radio = gr.Radio([4, 8, 16, 32], value=args.bits,
+                              label="模型加载bit数",
+                              interactive=True)
+        max_length_generation_slider = gr.Slider(8, 4096, value=args.max_length_generation, step=1,
+                                                 label="生成参数：max_new_tokens",
+                                                 interactive=True)
         do_sample_checkbox = gr.Checkbox(args.do_sample,
                                          label="生成参数：do_sample",
                                          interactive=True)
@@ -654,8 +666,8 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         update_model_params_button = gr.Button("更新参数并重新加载模型")
         update_model_params_button.click(update_model_params,
                                          show_progress=True,
-                                         inputs=[llm_model_dropdown, embedding_model_dropdown, kb_select_dropdown,
-                                                 do_sample_checkbox, top_p_slider, temperature_slider,
+                                         inputs=[llm_model_dropdown, embedding_model_dropdown, kb_select_dropdown, bits_radio,
+                                                 max_length_generation_slider, do_sample_checkbox, top_p_slider, temperature_slider,
                                                  repetition_penalty_slider, history_length_slider, chatbot],
                                          outputs=chatbot)
 

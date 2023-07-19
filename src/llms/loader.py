@@ -157,8 +157,8 @@ def load(args) -> Pipeline:
     # 8bit or 4bit
     elif args.bits in [4, 8]:
         assert torch.cuda.is_available(), "Quantized Model need CUDA devices"
-        config = AutoConfig.from_pretrained(args.model_name)
-        model = AutoModelForSeq2SeqLM.from_config(config, trust_remote_code=True)
+        config = AutoConfig.from_pretrained(args.model_name, trust_remote_code=True)
+        model = model_class.from_config(config, trust_remote_code=True)
         params = load_params_8bit_or_4bit(args, model)
         model = model_class.from_pretrained(args.model_name,
                                             # use_cache=False,
@@ -170,17 +170,19 @@ def load(args) -> Pipeline:
             config = AutoConfig.from_pretrained(args.model_name, trust_remote_code=True)
             model = model_class.from_config(config, trust_remote_code=True)
 
-        if "chatglm" in args.model_name:
-            device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
-        elif "baichuan" in args.model_name:
-            device_map = baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
-        else:
-            max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
-                                             no_split_module_classes=model._no_split_modules)
-            device_map = infer_auto_device_map(model, dtype=torch.float16, max_memory=max_memory,
-                                               no_split_module_classes=model._no_split_modules)
+        # if "chatglm" in args.model_name:
+        #     device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+        # elif "baichuan" in args.model_name:
+        #     device_map = baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+        # else:
+        #     max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
+        #                                      no_split_module_classes=model._no_split_modules)
+        #     device_map = infer_auto_device_map(model, dtype=torch.float16, max_memory=max_memory,
+        #                                        no_split_module_classes=model._no_split_modules)
+        device_map = "auto"
 
-        model = load_checkpoint_and_dispatch(model, checkpoint=args.model_name, device_map=device_map)
+        model = load_checkpoint_and_dispatch(model, checkpoint=args.model_name, device_map=device_map,
+                                             no_split_module_classes=model._no_split_modules)
     # single gpu card
     else:
         model = model_class.from_pretrained(args.model_name,
