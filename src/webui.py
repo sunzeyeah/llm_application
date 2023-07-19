@@ -94,7 +94,7 @@ args = {
                   f"D:\\Data\\models\\{default_llm_model}",
     "language": "zh",
     "verbose": True,
-    "multi_card": True,
+    "multi_card": False,
     "local_rank": 0,
     "checkpoint": None,
     "bits": 16,
@@ -216,6 +216,7 @@ def update_model_params(
         llm_model: str,
         embedding_model: str,
         kb_name: str,
+        multi_card: bool,
         bits: int,
         max_length_generation: int,
         do_sample: bool,
@@ -228,6 +229,7 @@ def update_model_params(
     global llm
     global embeddings
     global vector_store
+    args.multi_card = multi_card
     args.bits = bits
     args.max_length_generation = max_length_generation
     args.do_sample = do_sample
@@ -648,6 +650,9 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         bits_radio = gr.Radio([4, 8, 16, 32], value=args.bits,
                               label="模型加载bit数",
                               interactive=True)
+        multi_card_checkbox = gr.Checkbox(args.multi_card,
+                                          label="开启多卡推理",
+                                          interactive=True)
         max_length_generation_slider = gr.Slider(8, 4096, value=args.max_length_generation, step=1,
                                                  label="生成参数：max_new_tokens",
                                                  interactive=True)
@@ -666,9 +671,9 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         update_model_params_button = gr.Button("更新参数并重新加载模型")
         update_model_params_button.click(update_model_params,
                                          show_progress=True,
-                                         inputs=[llm_model_dropdown, embedding_model_dropdown, kb_select_dropdown, bits_radio,
-                                                 max_length_generation_slider, do_sample_checkbox, top_p_slider, temperature_slider,
-                                                 repetition_penalty_slider, history_length_slider, chatbot],
+                                         inputs=[llm_model_dropdown, embedding_model_dropdown, kb_select_dropdown, multi_card_checkbox,
+                                                 bits_radio, max_length_generation_slider, do_sample_checkbox, top_p_slider,
+                                                 temperature_slider, repetition_penalty_slider, history_length_slider, chatbot],
                                          outputs=chatbot)
 
     demo.load(
