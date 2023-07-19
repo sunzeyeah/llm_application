@@ -539,14 +539,14 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     # k_number = gr.Number(value=args.k, precision=0,
                     #                      label="召回数量：每次最多召回的document数量", interactive=True)
                     k_slider = gr.Slider(1, 10, value=args.k, step=1,
-                                         label="召回阈值：相似度超过该值的document才会被召回", interactive=True)
+                                         label="召回数量：每次最多召回的document数量", interactive=True)
                     # chunk_conent = gr.Checkbox(value=False,
                     #                            label="是否启用上下文关联",
                     #                            interactive=True)
                     # chunk_size_number = gr.Number(value=args.chunk_size, precision=0, minimum=64, maximum=4096,
                     #                               label="最大长度：单段内容的最大长度，超过该值会被切分为不同document", interactive=True)
                     chunk_size_slider = gr.Slider(64, 4096, value=args.chunk_size, step=1,
-                                                  label="召回阈值：相似度超过该值的document才会被召回", interactive=True)
+                                                  label="最大长度：单段内容的最大长度，超过该值会被切分为不同document", interactive=True)
                     update_kb_params_button = gr.Button("更新知识库参数")
                     update_kb_params_button.click(fn=update_kb_params,
                                                   inputs=[search_threshold_slider, k_slider, chunk_size_slider,
