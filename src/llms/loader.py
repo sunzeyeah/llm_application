@@ -186,7 +186,8 @@ def load(args) -> Pipeline:
     else:
         model = model_class.from_pretrained(args.model_name,
                                             # use_cache=False,
-                                            trust_remote_code=True).half().to(f"cuda:{args.local_rank}")
+                                            trust_remote_code=True,
+                                            device_map={"": args.local_rank})
 
     # load checkpoint if available
     if args.checkpoint is not None:
