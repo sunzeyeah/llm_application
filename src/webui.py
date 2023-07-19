@@ -94,6 +94,7 @@ args = {
                   f"D:\\Data\\models\\{default_llm_model}",
     "language": "zh",
     "verbose": True,
+    "multi_card": True,
     "local_rank": 0,
     "checkpoint": None,
     "bits": 16,

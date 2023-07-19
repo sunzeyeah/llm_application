@@ -47,6 +47,7 @@ def get_parser():
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--checkpoint", type=str)
     parser.add_argument("--verbose", action="store_true", help="是否输出中间结果")
+    parser.add_argument("--multi_card", action="store_true", help="是否使用多卡推理")
     # generation config
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--max_length_generation", type=int, default=512, help="Maximum number of newly generated tokens")
@@ -109,10 +110,7 @@ def init_llm(args) -> LLM:
         )
     elif args.mode == "local":
         # load huggingface pipeline
-        pipeline = load(
-            args,
-            # device_map={"": args.local_rank}
-        )
+        pipeline = load(args)
         # init langchain llm from
         llm = HuggingFacePipeline(pipeline=pipeline)
     else:

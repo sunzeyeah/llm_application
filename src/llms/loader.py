@@ -60,7 +60,43 @@ def chatglm_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[st
     return device_map
 
 
-def load_params_8bit_or_4bit(args, model: PreTrainedModel, device_map: Dict = None) -> Dict:
+def baichuan_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[str, int]:
+    layer_prefix = 'model'
+    if "7b" in model_name.lower():
+        # model.embed_tokens 占用1层
+        # model.norm 和 lm_head 占用1层
+        # model.layers 占用 32 层
+        # 总共34层分配到num_gpus张卡上
+        num_trans_layers = 32
+        per_gpu_layers = 34 / num_gpus
+    elif "13b" in model_name.lower():
+        # model.embed_tokens 占用1层
+        # model.norm 和 lm_head 占用1层
+        # model.layers 占用 40 层
+        # 总共42层分配到num_gpus张卡上
+        num_trans_layers = 40
+        per_gpu_layers = 42 / num_gpus
+    else:
+        raise ValueError(f"Only supports Baichuan-7B and Baichuan-13B, but {model_name} is provided")
+
+    device_map = {f'{layer_prefix}.embed_tokens': 0,
+                  f'{layer_prefix}.norm': 0,
+                  'lm_head': 0,
+                  f'base_model.model.lm_head': 0, }
+    used = 2
+    gpu_target = 0
+    for i in range(num_trans_layers):
+        if used >= per_gpu_layers:
+            gpu_target += 1
+            used = 0
+        assert gpu_target < num_gpus
+        device_map[f'{layer_prefix}.layers.{i}'] = gpu_target
+        used += 1
+
+    return device_map
+
+
+def load_params_8bit_or_4bit(args, model: PreTrainedModel) -> Dict:
     # init bnb config for quantization
     bf16 = torch.cuda.get_device_capability()[0] >= 8
     if bf16:
@@ -80,8 +116,8 @@ def load_params_8bit_or_4bit(args, model: PreTrainedModel, device_map: Dict = No
         "trust_remote_code": True,
         'quantization_config': bnb_config
     }
-    if device_map is not None:
-        params['device_map'] = device_map
+    if args.multi_card:
+        params['device_map'] = {"": args.local_rank}
     else:
         params['device_map'] = infer_auto_device_map(
             model,
@@ -92,7 +128,7 @@ def load_params_8bit_or_4bit(args, model: PreTrainedModel, device_map: Dict = No
     return params
 
 
-def load(args, device_map: Dict = None) -> Pipeline:
+def load(args) -> Pipeline:
     # device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
@@ -119,7 +155,7 @@ def load(args, device_map: Dict = None) -> Pipeline:
         assert torch.cuda.is_available(), "Quantized Model need CUDA devices"
         config = AutoConfig.from_pretrained(args.model_name)
         model = AutoModelForSeq2SeqLM.from_config(config, trust_remote_code=True)
-        params = load_params_8bit_or_4bit(args, model, device_map)
+        params = load_params_8bit_or_4bit(args, model)
         model = model_class.from_pretrained(args.model_name,
                                             # use_cache=False,
                                             trust_remote_code=True,
@@ -134,15 +170,19 @@ def load(args, device_map: Dict = None) -> Pipeline:
                                             # use_cache=False,
                                             trust_remote_code=True)
         if torch.cuda.is_available():
-            if device_map is None:
+            if args.multi_card:
                 if "chatglm" in args.model_name:
                     device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+                elif "baichuan" in args.model_name:
+                    device_map = baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
                 else:
                     max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
                                                      no_split_module_classes=model._no_split_modules)
                     device_map = infer_auto_device_map(model, dtype=torch.float16, max_memory=max_memory,
                                                        no_split_module_classes=model._no_split_modules)
-            model = dispatch_model(model, device_map=device_map)
+                model = dispatch_model(model, device_map=device_map)
+            else:
+                model = model.to(f"cuda:{args.local_rank}")
 
     # load checkpoint if available
     if args.checkpoint is not None:
