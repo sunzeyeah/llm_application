@@ -11,7 +11,7 @@ from transformers import (
     pipeline,
     Pipeline
 )
-from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
+from accelerate import init_empty_weights, infer_auto_device_map, load_checkpoint_and_dispatch
 from accelerate.utils import get_balanced_memory
 
 from src.llms import ChatGLMTextGenerationPipeline
@@ -149,9 +149,13 @@ def load(args) -> Pipeline:
         model_class = AutoModelForSeq2SeqLM
     else:
         model_class = AutoModelForCausalLM
-
+    # cpu
+    if not torch.cuda.is_available():
+        model = model_class.from_pretrained(args.model_name,
+                                            # use_cache=False,
+                                            trust_remote_code=True)
     # 8bit or 4bit
-    if args.bits in [4, 8]:
+    elif args.bits in [4, 8]:
         assert torch.cuda.is_available(), "Quantized Model need CUDA devices"
         config = AutoConfig.from_pretrained(args.model_name)
         model = AutoModelForSeq2SeqLM.from_config(config, trust_remote_code=True)
@@ -160,29 +164,28 @@ def load(args) -> Pipeline:
                                             # use_cache=False,
                                             trust_remote_code=True,
                                             **params)
-        # model = model_class.from_pretrained(args.model_name,
-        #                                               use_cache=False,
-        #                                               trust_remote_code=True,
-        #                                               quantization_config=bnb_config,
-        #                                               device_map={"": args.local_rank})
+    # multi gpu card
+    elif args.multi_card:
+        with init_empty_weights():
+            config = AutoConfig.from_pretrained(args.model_name, trust_remote_code=True)
+            model = model_class.from_config(config, trust_remote_code=True)
+
+        if "chatglm" in args.model_name:
+            device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+        elif "baichuan" in args.model_name:
+            device_map = baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+        else:
+            max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
+                                             no_split_module_classes=model._no_split_modules)
+            device_map = infer_auto_device_map(model, dtype=torch.float16, max_memory=max_memory,
+                                               no_split_module_classes=model._no_split_modules)
+
+        model = load_checkpoint_and_dispatch(model, checkpoint=args.model_name, device_map=device_map)
+    # single gpu card
     else:
         model = model_class.from_pretrained(args.model_name,
                                             # use_cache=False,
-                                            trust_remote_code=True)
-        if torch.cuda.is_available():
-            if args.multi_card:
-                if "chatglm" in args.model_name:
-                    device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
-                elif "baichuan" in args.model_name:
-                    device_map = baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
-                else:
-                    max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
-                                                     no_split_module_classes=model._no_split_modules)
-                    device_map = infer_auto_device_map(model, dtype=torch.float16, max_memory=max_memory,
-                                                       no_split_module_classes=model._no_split_modules)
-                model = dispatch_model(model, device_map=device_map)
-            else:
-                model = model.to(f"cuda:{args.local_rank}")
+                                            trust_remote_code=True).half().to(f"cuda:{args.local_rank}")
 
     # load checkpoint if available
     if args.checkpoint is not None:
