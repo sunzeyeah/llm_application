@@ -110,12 +110,11 @@ def load_params_8bit_or_4bit(args, model: PreTrainedModel) -> Dict:
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=bnb_4bit_compute_dtype
     )
-    # 多卡推理
     params = {
         "low_cpu_mem_usage": True,
-        "trust_remote_code": True,
         'quantization_config': bnb_config
     }
+    # infer device map
     if args.multi_card:
         params['device_map'] = {"": args.local_rank}
     else:
