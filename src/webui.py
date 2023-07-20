@@ -129,6 +129,8 @@ llm_model_list = [
     "bloomz-560M",
     "llama-7B",
     "llama-13B",
+    "llama2-7B-chat",
+    "llama2-13B-chat",
 ]
 embedding_model_list = [
     "text2vec-large-chinese",
