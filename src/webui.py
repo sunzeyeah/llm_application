@@ -87,8 +87,8 @@ def get_parser():
                         )
     parser.add_argument("--model_name", type=str, default="chatglm2-6B")
     parser.add_argument("--language", type=str, default="zh", help="prompt使用的语言，一般与模型匹配")
-    parser.add_argument("--verbose", type=bool, default=True, help="是否输出中间结果")
-    parser.add_argument("--multi_card", type=bool, default=False, help="是否使用多卡推理")
+    parser.add_argument("--verbose", action="store_true", help="是否输出中间结果")
+    parser.add_argument("--multi_card", action="store_true", help="是否使用多卡推理")
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--checkpoint", type=str, default=None)
@@ -506,6 +506,10 @@ def get_answer(task: str,
                 reply = f"问：{query}\n\n答：{resp}"
                 history[-1][-1] += "\n\n" + reply
                 yield history, ""
+    except torch.cuda.OutOfMemoryError as e:
+        reply = f"""【WARNING】计算答案时发生CUDA out of memory，请开启多卡或者使用8-bit和4-bit"""
+        history.append([None, reply])
+        yield history, ""
     except Exception as e:
         logger.error("获取答案失败", e)
         reply = str(e)
