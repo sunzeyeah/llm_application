@@ -175,7 +175,7 @@ def initialize_llm() -> str:
     global llm
     try:
         llm = init_llm(args)
-        llm_status = f"""LLM模型：{args.model_name}已成功加载"""
+        llm_status = f"""LLM模型：{args.model_name}已成功加载，加载模式：{torch.cuda.device_count() if args.multi_card else "单"}卡 + {args.bits}-bit"""
     except torch.cuda.OutOfMemoryError as e:
         llm_status = f"""【WARNING】加载LLM模型：{args.model_name} 时发生CUDA out of memory，请开启多卡或者使用8-bit和4-bit"""
         logger.error(llm_status, e)

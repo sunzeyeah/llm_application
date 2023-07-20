@@ -112,13 +112,16 @@ def load_params_8bit_or_4bit(args, model: PreTrainedModel) -> Dict:
     }
     # infer device map
     if args.multi_card:
-        params['device_map'] = {"": args.local_rank}
-    else:
+        max_memory = get_balanced_memory(model, dtype=torch.int8, low_zero=False,
+                                         no_split_module_classes=model._no_split_modules)
         params['device_map'] = infer_auto_device_map(
             model,
             dtype=torch.int8,
-            no_split_module_classes=model._no_split_modules
+            no_split_module_classes=model._no_split_modules,
+            max_memory=max_memory
         )
+    else:
+        params['device_map'] = {"": args.local_rank}
 
     return params
 
@@ -152,7 +155,6 @@ def load(args) -> Pipeline:
                                             trust_remote_code=True)
     # 8bit or 4bit
     elif args.bits in [4, 8]:
-        assert torch.cuda.is_available(), "Quantized Model need CUDA devices"
         config = AutoConfig.from_pretrained(os.path.join(args.model_path, args.model_name), trust_remote_code=True)
         model = model_class.from_config(config, trust_remote_code=True)
         params = load_params_8bit_or_4bit(args, model)
