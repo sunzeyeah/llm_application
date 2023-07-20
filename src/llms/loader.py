@@ -53,8 +53,8 @@ def chatglm_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[st
     for i in range(num_hidden_layers):
         if used >= layers_per_gpu + (gpu_target % 2):
             gpu_target += 1
+            gpu_target %= num_gpus
             used = 0
-        assert gpu_target < num_gpus
         device_map[f'{layer_prefix}{encode}.layers.{i}'] = gpu_target
         used += 1
 
@@ -84,8 +84,8 @@ def llama_and_baichuan_auto_configure_device_map(num_gpus: int, model_name: str)
     for i in range(num_hidden_layers):
         if used >= layers_per_gpu + (gpu_target % 2):
             gpu_target += 1
+            gpu_target %= num_gpus
             used = 0
-        assert gpu_target < num_gpus
         device_map[f'{layer_prefix}.layers.{i}'] = gpu_target
         used += 1
 
@@ -164,12 +164,12 @@ def load(args) -> Pipeline:
     elif args.multi_card:
         with init_empty_weights():
             config = AutoConfig.from_pretrained(os.path.join(args.model_path, args.model_name), trust_remote_code=True)
-            model = model_class.from_config(config, trust_remote_code=True)
-
-        if "llama" in args.model_name.lower():
+            model = model_class.from_config(config, trust_remote_code=True).half()
+        model.tie_weights()
+        if "llama" in args.model_name.lower() or "baichuan" in args.model_name.lower() or "vicuna" in args.model_name.lower():
             device_map = llama_and_baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
-        # elif "chatglm" in args.model_name.lower():
-        #     device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+        elif "chatglm" in args.model_name.lower():
+            device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
         else:
         #     max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
         #                                      no_split_module_classes=model._no_split_modules)
@@ -186,7 +186,7 @@ def load(args) -> Pipeline:
         model = model_class.from_pretrained(os.path.join(args.model_path, args.model_name),
                                             # use_cache=False,
                                             trust_remote_code=True,
-                                            device_map={"": args.local_rank})
+                                            device_map={"": args.local_rank}).half()
 
     # load checkpoint if available
     if args.checkpoint is not None:
