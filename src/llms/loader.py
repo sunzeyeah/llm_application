@@ -23,8 +23,8 @@ def chatglm_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[st
     # transformer.final_layernorm 和 lm_head 占用1层
     # transformer.layers 占用 28 层
     # 总共30层分配到num_gpus张卡上
-    num_trans_layers = 28
-    per_gpu_layers = 30 / num_gpus
+    num_hidden_layers = 28
+    layers_per_gpu = (num_hidden_layers+2) // num_gpus
     layer_prefix = 'transformer'
 
     # bugfix: 在linux中调用torch.embedding传入的weight,input不在同一device上,导致RuntimeError
@@ -50,8 +50,8 @@ def chatglm_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[st
                       f'base_model.model.lm_head': 0, }
     used = 2
     gpu_target = 0
-    for i in range(num_trans_layers):
-        if used >= per_gpu_layers:
+    for i in range(num_hidden_layers):
+        if used >= layers_per_gpu + (gpu_target % 2):
             gpu_target += 1
             used = 0
         assert gpu_target < num_gpus
@@ -61,33 +61,28 @@ def chatglm_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[st
     return device_map
 
 
-def baichuan_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[str, int]:
+def llama_and_baichuan_auto_configure_device_map(num_gpus: int, model_name: str) -> Dict[str, int]:
     layer_prefix = 'model'
+    # model.embed_tokens 占用1层
+    # model.norm 和 lm_head 占用1层
+    # model.layers 占用 num_hidden_layers 层
+    # 总共num_hidden_layers+2层分配到num_gpus张卡上
     if "7b" in model_name.lower():
-        # model.embed_tokens 占用1层
-        # model.norm 和 lm_head 占用1层
-        # model.layers 占用 32 层
-        # 总共34层分配到num_gpus张卡上
-        num_trans_layers = 32
-        per_gpu_layers = 34 / num_gpus
+        num_hidden_layers = 32
     elif "13b" in model_name.lower():
-        # model.embed_tokens 占用1层
-        # model.norm 和 lm_head 占用1层
-        # model.layers 占用 40 层
-        # 总共42层分配到num_gpus张卡上
-        num_trans_layers = 40
-        per_gpu_layers = 42 / num_gpus
+        num_hidden_layers = 40
     else:
-        raise ValueError(f"Only supports Baichuan-7B and Baichuan-13B, but {model_name} is provided")
+        raise ValueError(f"Only supports baichuan-7B, baichuan-13B, llama-7B and llama-13B, but {model_name} is provided")
 
+    layers_per_gpu = (num_hidden_layers+2) // num_gpus
     device_map = {f'{layer_prefix}.embed_tokens': 0,
                   f'{layer_prefix}.norm': 0,
                   'lm_head': 0,
                   f'base_model.model.lm_head': 0, }
     used = 2
     gpu_target = 0
-    for i in range(num_trans_layers):
-        if used >= per_gpu_layers:
+    for i in range(num_hidden_layers):
+        if used >= layers_per_gpu + (gpu_target % 2):
             gpu_target += 1
             used = 0
         assert gpu_target < num_gpus
@@ -171,16 +166,16 @@ def load(args) -> Pipeline:
             config = AutoConfig.from_pretrained(os.path.join(args.model_path, args.model_name), trust_remote_code=True)
             model = model_class.from_config(config, trust_remote_code=True)
 
-        # if "chatglm" in args.model_name:
+        if "llama" in args.model_name.lower():
+            device_map = llama_and_baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+        # elif "chatglm" in args.model_name.lower():
         #     device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
-        # elif "baichuan" in args.model_name:
-        #     device_map = baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
-        # else:
+        else:
         #     max_memory = get_balanced_memory(model, dtype=torch.float16, low_zero=False,
         #                                      no_split_module_classes=model._no_split_modules)
         #     device_map = infer_auto_device_map(model, dtype=torch.float16, max_memory=max_memory,
         #                                        no_split_module_classes=model._no_split_modules)
-        device_map = "auto"
+            device_map = "auto"
 
         model = load_checkpoint_and_dispatch(model,
                                              checkpoint=os.path.join(args.model_path, args.model_name),

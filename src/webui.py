@@ -507,6 +507,7 @@ def get_answer(task: str,
                 history[-1][-1] += "\n\n" + reply
                 yield history, ""
     except Exception as e:
+        logger.error("获取答案失败", e)
         reply = str(e)
         history.append([None, reply])
         yield history, ""
