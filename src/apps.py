@@ -5,9 +5,7 @@ from typing import Dict
 from langchain.embeddings.base import Embeddings
 from langchain.llms.base import LLM
 
-sys.path.insert(0, "/root/autodl-tmp/Code/llm_application")
 sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/llm_application")
-# sys.path.insert(0, "/mnt/share-pa002-vol682688-prd/sunzeye273/Code/chatgpt")
 sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/llm_application")
 import os
 import argparse
@@ -34,10 +32,16 @@ def get_parser():
     # Required Params
     parser.add_argument("--mode", type=str, required=True, help="openai_api, huggingface_api, custom_api or local,"
                                                                 "specify how to call the llm model")
-    parser.add_argument("--task", type=str, required=True, help="google_search,"
+    parser.add_argument("--task", type=str, required=True, help="google_search, summarization, chatbot"
                                                                 "specify the task to perform")
     # Optional Params
     parser.add_argument("--prompt", type=str, default=None)
+    parser.add_argument("--model_path", type=str,
+                        default=f"D:\\Data\\models" if sys.platform == "win32" else \
+                            f"/Users/zeyesun/Documents/Data/models" if sys.platform == "darwin" else \
+                            f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint"
+                            # f"/mnt/sfevol775196/sunzeye273/Data/models"
+                        )
     parser.add_argument("--model_name", type=str, default=None)
     parser.add_argument("--language", type=str, default="zh", help="prompt使用的语言，一般与模型匹配")
     parser.add_argument("--api_url", type=str, default=None)
@@ -135,7 +139,7 @@ def init_task(args, llm: LLM, embeddings: Embeddings = None) -> Task:
                 embeddings = OpenAIEmbeddings()
             else:
                 embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-                embeddings = HuggingFaceEmbeddings(model_name=args.embedding_name,
+                embeddings = HuggingFaceEmbeddings(model_name=os.path.join(args.model_path, args.embedding_name),
                                                    model_kwargs={'device': embedding_device})
         task = ChatBot(llm=llm, language=args.language, verbose=args.verbose,
                        embeddings=embeddings, vector_dir=os.path.join(args.vector_dir, args.kb_name),

@@ -1,3 +1,4 @@
+import os
 from typing import Dict
 import torch
 
@@ -130,43 +131,44 @@ def load_params_8bit_or_4bit(args, model: PreTrainedModel) -> Dict:
 def load(args) -> Pipeline:
     # device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
     # load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(os.path.join(args.model_path, args.model_name),
+                                              trust_remote_code=True)
     # set eop token
-    if "chatglm2" in args.model_name:
+    if "chatglm2" in args.model_name.lower():
         eos_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
-    elif "chatglm1_1" in args.model_name:
+    elif "chatglm1_1" in args.model_name.lower():
         eos_token_id = tokenizer.eos_token_id
-    elif "chatglm" in args.model_name:
+    elif "chatglm" in args.model_name.lower():
         eos_token_id = tokenizer.eop_token_id
-    elif "baichuan" in args.model_name:
+    elif "baichuan" in args.model_name.lower():
         eos_token_id = tokenizer.bos_token_id if args.checkpoint is not None else tokenizer.eos_token_id
     else:
         eos_token_id = tokenizer.eos_token_id
 
     # load model and init pipeline
-    if "chatglm" in args.model_name:
+    if "chatglm" in args.model_name.lower():
         model_class = AutoModelForSeq2SeqLM
     else:
         model_class = AutoModelForCausalLM
     # cpu
     if not torch.cuda.is_available():
-        model = model_class.from_pretrained(args.model_name,
+        model = model_class.from_pretrained(os.path.join(args.model_path, args.model_name),
                                             # use_cache=False,
                                             trust_remote_code=True)
     # 8bit or 4bit
     elif args.bits in [4, 8]:
         assert torch.cuda.is_available(), "Quantized Model need CUDA devices"
-        config = AutoConfig.from_pretrained(args.model_name, trust_remote_code=True)
+        config = AutoConfig.from_pretrained(os.path.join(args.model_path, args.model_name), trust_remote_code=True)
         model = model_class.from_config(config, trust_remote_code=True)
         params = load_params_8bit_or_4bit(args, model)
-        model = model_class.from_pretrained(args.model_name,
+        model = model_class.from_pretrained(os.path.join(args.model_path, args.model_name),
                                             # use_cache=False,
                                             trust_remote_code=True,
                                             **params)
     # multi gpu card
     elif args.multi_card:
         with init_empty_weights():
-            config = AutoConfig.from_pretrained(args.model_name, trust_remote_code=True)
+            config = AutoConfig.from_pretrained(os.path.join(args.model_path, args.model_name), trust_remote_code=True)
             model = model_class.from_config(config, trust_remote_code=True)
 
         # if "chatglm" in args.model_name:
@@ -180,11 +182,13 @@ def load(args) -> Pipeline:
         #                                        no_split_module_classes=model._no_split_modules)
         device_map = "auto"
 
-        model = load_checkpoint_and_dispatch(model, checkpoint=args.model_name, device_map=device_map,
+        model = load_checkpoint_and_dispatch(model,
+                                             checkpoint=os.path.join(args.model_path, args.model_name),
+                                             device_map=device_map,
                                              no_split_module_classes=model._no_split_modules)
     # single gpu card
     else:
-        model = model_class.from_pretrained(args.model_name,
+        model = model_class.from_pretrained(os.path.join(args.model_path, args.model_name),
                                             # use_cache=False,
                                             trust_remote_code=True,
                                             device_map={"": args.local_rank})
@@ -198,7 +202,7 @@ def load(args) -> Pipeline:
     model.eval()
 
     # init huggingface pipeline
-    if "chatglm" in args.model_name:
+    if "chatglm" in args.model_name.lower():
         pipe = ChatGLMTextGenerationPipeline(
             model=model,
             tokenizer=tokenizer,

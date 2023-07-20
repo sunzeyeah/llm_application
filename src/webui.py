@@ -1,6 +1,8 @@
+import argparse
 import sys
 
 sys.path.insert(0, "/mnt/pa002-28359-vol543625-private/Code/llm_application")
+sys.path.insert(0, "/mnt/sfevol775196/sunzeye273/Code/llm_application")
 sys.path.insert(0, "/Users/zeyesun/Documents/Code/llm_application")
 sys.path.insert(0, "D:\\Code\\llm_application")
 import os
@@ -24,12 +26,6 @@ from src.utils import logger, rmdir, list_dir, print_gpu_utilization
 from src.tasks.chatbot import FAQLoader
 from src.tasks import Task
 from src.apps import init_llm, init_task
-
-
-class dotdict(dict):
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
 
 
 # Gradio Settings
@@ -69,78 +65,69 @@ task_zh_to_en = {
     "问答机器人": "chatbot",
     "闲聊": "chitchat",
 }
-default_task = "chatbot"
-default_llm_model = "chatglm2-6B"
-# default_llm_model = "bloomz-560M"
-default_embedding_name = "text2vec-large-chinese"
-default_kb_name = "faq"
-# default_kb_name = "test"
-init_message = f"""欢迎使用 LLM Application Web UI！
-
-请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i + 1}) {t}" for i, t in enumerate(task_list_zh)])}
-
-当前任务：{task_en_to_zh[default_task]}
-当前LLM模型：{default_llm_model}
-当前embedding模型：{default_embedding_name}
-当前知识库：{default_kb_name}
-"""
-
-# LangChain and LLM Params
-args = {
-    "mode": "local",
-    "task": default_task,
-    "model_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_llm_model}" if sys.platform == "linux" or sys.platform == "linux2" else \
-                  f"/Users/zeyesun/Documents/Data/models/{default_llm_model}" if sys.platform == "darwin" else \
-                  f"D:\\Data\\models\\{default_llm_model}",
-    "language": "zh",
-    "verbose": True,
-    "multi_card": False,
-    "local_rank": 0,
-    "checkpoint": None,
-    "bits": 16,
-    "max_length_generation": 256,
-    "do_sample": False,
-    "num_return_sequences": 1,
-    "top_p": 0.9,
-    "temperature": 0.9,
-    "repetition_penalty": 1.0,
-    "history_length": 0,
-    "chunk_size": 1024,
-    "chunk_overlap": 0,
-    "vector_dir": "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings" if sys.platform == "linux" or sys.platform == "linux2" else \
-                  "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings" if sys.platform == "darwin" else \
-                  "D:\\Data\\chatgpt\\output\\embeddings",
-    "embedding_name": f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint/{default_embedding_name}" if sys.platform == "linux" or sys.platform == "linux2" else \
-                      f"/Users/zeyesun/Documents/Data/models/{default_embedding_name}" if sys.platform == "darwin" else \
-                      f"D:\\Data\\models\\{default_embedding_name}",
-    "kb_name": default_kb_name,
-    "search_type": "similarity",
-    "k": 5,
-    "search_threshold": 0.7,
-    "serp_api_key": None,
-}
-args = dotdict(args)
-llm_model_list = [
-    "chatglm2-6B",
-    "chatglm2-6B-int4",
-    "chatglm-6B",
-    "vicuna-7B-v1.1",
-    "baichuan-13B-chat",
-    "bloomz-560M",
-    "llama-7B",
-    "llama-13B",
-    "llama2-7B-chat",
-    "llama2-13B-chat",
-]
-embedding_model_list = [
-    "text2vec-large-chinese",
-]
 
 # Global Variables
 llm: LLM = None
 langchain_task: Task = None
 embeddings: Embeddings = None
 vector_store: VectorStore = None
+
+
+def get_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", type=str, default="local", help="openai_api, huggingface_api, custom_api or local,"
+                                                                  "specify how to call the llm model")
+    parser.add_argument("--task", type=str, default="chatbot", help="google_search, summarization, chatbot, chitchat"
+                                                                    "specify the task to perform")
+    parser.add_argument("--model_path", type=str,
+                        default=f"D:\\Data\\models" if sys.platform == "win32" else \
+                            f"/Users/zeyesun/Documents/Data/models" if sys.platform == "darwin" else \
+                            f"/mnt/pa002-28359-vol543625-share/LLM-data/checkpoint"
+                            # f"/mnt/sfevol775196/sunzeye273/Data/models"
+                        )
+    parser.add_argument("--model_name", type=str, default="chatglm2-6B")
+    parser.add_argument("--language", type=str, default="zh", help="prompt使用的语言，一般与模型匹配")
+    parser.add_argument("--verbose", type=bool, default=True, help="是否输出中间结果")
+    parser.add_argument("--multi_card", type=bool, default=False, help="是否使用多卡推理")
+    parser.add_argument("--local_rank", type=int, default=0)
+    parser.add_argument("--bits", type=int, default=16)
+    parser.add_argument("--checkpoint", type=str, default=None)
+
+    # generation config
+    parser.add_argument("--max_length", type=int, default=2048)
+    parser.add_argument("--max_length_generation", type=int, default=256, help="Maximum number of newly generated tokens")
+    parser.add_argument("--do_sample", type=bool, default=False)
+    parser.add_argument("--num_return_sequences", type=int, default=1)
+    parser.add_argument("--top_k", type=int, default=10)
+    parser.add_argument("--top_p", type=float, default=0.9)
+    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--repetition_penalty", type=float, default=1.0)
+    parser.add_argument("--history_length", type=int, default=0, help="Maximum round of history to append to prompt")
+    # Task: Summarization
+    parser.add_argument("--chunk_size", type=int, default=2048)
+    parser.add_argument("--chunk_overlap", type=int, default=0)
+    # Task: Search
+    parser.add_argument("--serp_api_key", type=str, default=None)
+    # Task: ChatBot
+    parser.add_argument("--embedding_name", type=str, default="text2vec-large-chinese",
+                        help="openai or path to huggingface embedding, specify which embedding method to use")
+    parser.add_argument("--vector_dir", type=str,
+                        default="D:\\Data\\chatgpt\\output\\embeddings" if sys.platform == "win32" else \
+                            "/Users/zeyesun/Documents/Data/chatgpt/output/embeddings" if sys.platform == "darwin" else \
+                            "/mnt/pa002-28359-vol543625-private/Data/chatgpt/output/embeddings",
+                            # "/mnt/sfevol775196/sunzeye273/Data/chatgpt/output/embeddings",
+                        help="本地知识库的向量文件根目录")
+    parser.add_argument("--kb_name", type=str, default="faq", help="知识库名称")
+    parser.add_argument("--k", type=int, default=3, help="number of docs to recall for answering")
+    parser.add_argument("--search_type", type=str, default="similarity", help="similarity, similarity_score_threshold, mmr"
+                                                                              "metrics used to compare document vectors")
+    parser.add_argument("--search_threshold", type=float, default=0.7, help="similarity_score_threshold")
+    parser.add_argument("--data_dir", type=str, default=None, help="本地知识库原始文件地址")
+    parser.add_argument("--pattern", type=str, default=None, help="本地知识库的文件名pattern")
+
+    args = parser.parse_args()
+
+    return args
 
 
 def init_embeddings_and_vector_store(vector_dir: str,
@@ -151,7 +138,7 @@ def init_embeddings_and_vector_store(vector_dir: str,
     try:
         # load embedding model
         embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
-        embeddings = HuggingFaceEmbeddings(model_name=args.embedding_name,
+        embeddings = HuggingFaceEmbeddings(model_name=os.path.join(args.model_path, args.embedding_name),
                                            model_kwargs={'device': embedding_device})
         # make directory (if vector_dir does not exist)
         if not os.path.exists(vector_dir):
@@ -178,7 +165,7 @@ def init_embeddings_and_vector_store(vector_dir: str,
             vector_store = Chroma(persist_directory=vector_dir, embedding_function=embeddings)
             kb_status = f"""知识库：{os.path.basename(vector_dir)}已成功加载"""
     except Exception as e:
-        kb_status = f"""【WARNING】知识库：{os.path.basename(vector_dir)}加载失败"""
+        kb_status = f"""【WARNING】知识库：{os.path.basename(vector_dir)}加载失败, {str(e)}"""
         logger.error(kb_status, e)
 
     return kb_status
@@ -188,12 +175,12 @@ def initialize_llm() -> str:
     global llm
     try:
         llm = init_llm(args)
-        llm_status = f"""LLM模型：{os.path.basename(args.model_name)}已成功加载"""
+        llm_status = f"""LLM模型：{args.model_name}已成功加载"""
     except torch.cuda.OutOfMemoryError as e:
-        llm_status = f"""【WARNING】加载LLM模型：{os.path.basename(args.model_name)}时发生{str(e)}，请开启多卡或者使用8-bit和4-bit"""
+        llm_status = f"""【WARNING】加载LLM模型：{args.model_name} 时发生CUDA out of memory，请开启多卡或者使用8-bit和4-bit"""
         logger.error(llm_status, e)
     except Exception as e:
-        llm_status = f"""【WARNING】LLM模型：{os.path.basename(args.model_name)}加载失败，请到页面左上角"模型配置"选项卡中重新选择后点击"加载模型"按钮"""
+        llm_status = f"""【WARNING】LLM模型：{args.model_name}加载失败, {str(e)}\n请到页面左上角"模型配置"选项卡中重新选择后点击"加载模型"按钮"""
         logger.error(llm_status, e)
 
     return llm_status
@@ -211,7 +198,7 @@ def initialize_task() -> str:
             task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}默认使用Google，需要SERP_API_KEY，请在右侧输入框内进行输入"""
             logger.warning(task_status)
         else:
-            task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}加载失败"""
+            task_status = f"""【WARNING】任务：{task_en_to_zh[args.task]}加载失败, {str(e)}"""
             logger.error(task_status, e)
 
     return task_status
@@ -246,11 +233,26 @@ def update_model_params(
     # release occupied GPU memory
     if torch.cuda.is_available() and args.local_rank >= 0:
         # print_gpu_utilization("before gpu release", args.local_rank, False)
-        del llm.pipeline.model
-        del llm.pipeline.tokenizer
-        del embeddings
-        del vector_store
-        llm.pipeline.model = llm.pipeline.tokenizer = embeddings = vector_store = None
+        try:
+            del llm.pipeline.model
+            llm.pipeline.model = None
+        except AttributeError:
+            pass
+        try:
+            del llm.pipeline.tokenizer
+            llm.pipeline.tokenizer = None
+        except AttributeError:
+            pass
+        try:
+            del embeddings
+            embeddings = None
+        except NameError:
+            pass
+        try:
+            del vector_store
+            vector_store = None
+        except NameError:
+            pass
         gc.collect()
         # with torch.cuda.device(f"cuda:{args.local_rank}"):
         torch.cuda.empty_cache()
@@ -260,9 +262,8 @@ def update_model_params(
         # print_gpu_utilization("after gpu release", args.local_rank, False)
 
     try:
-        model_dir = os.sep.join(args.model_name.split(os.sep)[:-1])
-        args.model_name = os.path.join(model_dir, llm_model)
-        args.embedding_name = os.path.join(model_dir, embedding_model)
+        args.model_name = llm_model
+        args.embedding_name = embedding_model
         # re-init embeddings and vector store
         kb_status = init_embeddings_and_vector_store(vector_dir=os.path.join(args.vector_dir, kb_name))
         logger.debug(kb_status)
@@ -275,7 +276,7 @@ def update_model_params(
         #              f"repetition_penalty={repetition_penalty}"
         logger.debug(llm_status)
     except Exception as e:
-        llm_status = f"""【WARNING】LLM模型参数更新失败"""
+        llm_status = f"""【WARNING】LLM模型参数更新失败, {str(e)}"""
         logger.error(llm_status, e)
     return history + [[None, llm_status]]
 
@@ -344,7 +345,7 @@ def delete_kb(kb_to_delte: str, current_kb: str, chatbot: List[List[str]]) -> Tu
                chatbot, \
                gr.update(visible=True)
     except Exception as e:
-        kb_status = f"【WARNING】删除知识库：{kb_to_delte}失败"
+        kb_status = f"【WARNING】删除知识库：{kb_to_delte}失败, {str(e)}"
         logger.error(kb_status, e)
         chatbot = chatbot + [[None, kb_status]]
         return gr.update(visible=True), \
@@ -513,6 +514,33 @@ def get_answer(task: str,
     flag_csv_logger.flag([task, query, history], username=FLAG_USER_NAME)
 
 
+# LangChain and LLM Params
+args = get_parser()
+init_message = f"""欢迎使用 LLM Application Web UI！
+
+请在右侧切换任务，目前支持{len(task_list_zh)}类：{" ".join([f"({i + 1}) {t}" for i, t in enumerate(task_list_zh)])}
+
+当前任务：{task_en_to_zh[args.task]}
+当前LLM模型：{args.model_name}
+当前embedding模型：{args.embedding_name}
+当前知识库：{args.kb_name}
+"""
+llm_model_list = [
+    "chatglm2-6B",
+    "chatglm2-6B-int4",
+    "chatglm-6B",
+    "vicuna-7B-v1.1",
+    "baichuan-13B-chat",
+    "bloomz-560M",
+    "llama-7B",
+    "llama-13B",
+    "llama2-7B-chat",
+    "llama2-13B-chat",
+]
+embedding_model_list = [
+    "text2vec-large-chinese",
+]
+
 # 初始化所有模型（LLM, Embeddings, Chain等）
 llm_status = initialize_llm()
 task_status = initialize_task()
@@ -521,7 +549,7 @@ task_status = initialize_task()
 with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as demo:
     task_status = gr.State(task_status)
     llm_status = gr.State(llm_status)
-    kb_status = gr.State(default_kb_name)
+    kb_status = gr.State(args.kb_name)
     file_status = gr.State("")
     gr.Markdown(webui_title)
     with gr.Tab("对话"):
@@ -533,11 +561,11 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                 query = gr.Textbox(show_label=False,
                                    placeholder="请输入提问内容，按回车进行提交").style(container=False)
             with gr.Column(scale=5):
-                task = gr.Radio(task_list_zh, label="请选择任务", value=task_en_to_zh[default_task])
-                kb_params = gr.Accordion("【问答机器人】参数设定", visible=task_en_to_zh[default_task] == "问答机器人")
-                kb_setting = gr.Accordion("【问答机器人】修改知识库", visible=task_en_to_zh[default_task] == "问答机器人")
-                summarization_setting = gr.Accordion("【文本摘要】上传文件", visible=task_en_to_zh[default_task] == "文本摘要")
-                search_setting = gr.Accordion("【搜索引擎】API KEY", visible=task_en_to_zh[default_task] == "搜索引擎")
+                task = gr.Radio(task_list_zh, label="请选择任务", value=task_en_to_zh[args.task])
+                kb_params = gr.Accordion("【问答机器人】参数设定", visible=task_en_to_zh[args.task] == "问答机器人")
+                kb_setting = gr.Accordion("【问答机器人】修改知识库", visible=task_en_to_zh[args.task] == "问答机器人")
+                summarization_setting = gr.Accordion("【文本摘要】上传文件", visible=task_en_to_zh[args.task] == "文本摘要")
+                search_setting = gr.Accordion("【搜索引擎】API KEY", visible=task_en_to_zh[args.task] == "搜索引擎")
                 task.change(fn=change_task,
                             inputs=[task, chatbot],
                             outputs=[kb_params, kb_setting, summarization_setting, search_setting, chatbot])
@@ -566,7 +594,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     kb_select_dropdown = gr.Dropdown(get_kb_list(),
                                                      label="请选择要加载的知识库",
                                                      interactive=True,
-                                                     value=default_kb_name)
+                                                     value=args.kb_name)
                     kb_select_button = gr.Button("切换知识库")
                     kb_add_textbox = gr.Textbox(label='请输入新增知识库的原始文件地址',
                                                 info='路径格式：path/{kb_name}/*.jsonl，文件中每行的格式：{"prompt": "", "label": ""}）',
@@ -649,12 +677,12 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
     with gr.Tab("模型配置"):
         llm_model_dropdown = gr.Dropdown(llm_model_list,
                                          label="LLM 模型",
-                                         value=default_llm_model,
+                                         value=args.model_name,
                                          interactive=True,
                                          visible=True)
         embedding_model_dropdown = gr.Dropdown(embedding_model_list,
                                                label="Embedding 模型",
-                                               value=default_embedding_name,
+                                               value=args.embedding_name,
                                                interactive=True,
                                                visible=True)
         bits_radio = gr.Radio([4, 8, 16, 32], value=args.bits,
