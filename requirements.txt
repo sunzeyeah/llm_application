@@ -3,7 +3,8 @@ numpy
 torch
 sentence_transformers
 transformers>=4.31.0
-xformers
+accelerate>=0.20.3
+[xformers]
 bitsandbytes>=0.39.0
 langchain==0.0.229
 openai
