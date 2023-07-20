@@ -189,6 +189,9 @@ def initialize_llm() -> str:
     try:
         llm = init_llm(args)
         llm_status = f"""LLM模型：{os.path.basename(args.model_name)}已成功加载"""
+    except torch.cuda.OutOfMemoryError as e:
+        llm_status = f"""【WARNING】加载LLM模型：{os.path.basename(args.model_name)}时发生{str(e)}，请开启多卡或者使用8-bit和4-bit"""
+        logger.error(llm_status, e)
     except Exception as e:
         llm_status = f"""【WARNING】LLM模型：{os.path.basename(args.model_name)}加载失败，请到页面左上角"模型配置"选项卡中重新选择后点击"加载模型"按钮"""
         logger.error(llm_status, e)
@@ -452,55 +455,60 @@ def get_answer(task: str,
                history: List[List[str]],
                query: str = None,
                files: List[NamedTemporaryFile] = None) -> None:
-    if task == "搜索引擎":
-        result = langchain_task(prompt=query)
-        for resp in [result]:
-            reply = f"问：{query}\n\n答：{resp}"
-            history.append([None, reply])
-            yield history, ""
-    elif task == "文本摘要":
-        for file in files:
-            resp = langchain_task(input_file=file.name, chunk_size=args.chunk_size,
-                                  chunk_overlap=args.chunk_overlap)
-            reply = f"摘要：{resp}"
-            history.append([None, reply])
-            yield history, ""
-    elif task == "问答机器人":
-        result = langchain_task(query=query, search_type=args.search_type, k=args.k)
-        for resp in [result]:
-            source = [
-                f"<details>" \
-                f"<summary>出处：[{i + 1}] {doc.page_content}</summary>\n" \
-                f"{doc.metadata['answer']}\n" \
-                f"</details>"
-                for i, doc in enumerate(resp["source_documents"])
-            ]
-            reply = "\n\n".join([f"问：{query}", f"答：{result['result']}"] + source)
-            history.append([None, reply])
-            yield history, ""
-    else:
-        # only select the most recent chitchat history, search or chatbot history is not selected
-        pattern = r"(.*?)问：[\s]*(.*?)答：[\s]*(.*)"
-        for idx in range(len(history)-1, -1, -1):
-            _, text = history[idx]
-            if "闲聊已成功加载" in text:
-                break
+    try:
+        if task == "搜索引擎":
+            result = langchain_task(prompt=query)
+            for resp in [result]:
+                reply = f"问：{query}\n\n答：{resp}"
+                history.append([None, reply])
+                yield history, ""
+        elif task == "文本摘要":
+            for file in files:
+                resp = langchain_task(input_file=file.name, chunk_size=args.chunk_size,
+                                      chunk_overlap=args.chunk_overlap)
+                reply = f"摘要：{resp}"
+                history.append([None, reply])
+                yield history, ""
+        elif task == "问答机器人":
+            result = langchain_task(query=query, search_type=args.search_type, k=args.k)
+            for resp in [result]:
+                source = [
+                    f"<details>" \
+                    f"<summary>出处：[{i + 1}] {doc.page_content}</summary>\n" \
+                    f"{doc.metadata['answer']}\n" \
+                    f"</details>"
+                    for i, doc in enumerate(resp["source_documents"])
+                ]
+                reply = "\n\n".join([f"问：{query}", f"答：{result['result']}"] + source)
+                history.append([None, reply])
+                yield history, ""
         else:
-            idx = len(history)
-        dialog_history = []
-        for i in range(idx, len(history)):
-            _, text = history[i]
-            match = re.search(pattern, text, re.DOTALL)
-            if match:
-                old_query = match.group(2).strip()
-                old_reponse = match.group(3).strip()
-                dialog_history.append((old_query, old_reponse))
-        logger.debug(f"dialog_history: {dialog_history}")
-        result = llm(query, history=dialog_history)
-        for resp in [result]:
-            reply = f"问：{query}\n\n答：{resp}"
-            history[-1][-1] += "\n\n" + reply
-            yield history, ""
+            # only select the most recent chitchat history, search or chatbot history is not selected
+            pattern = r"(.*?)问：[\s]*(.*?)答：[\s]*(.*)"
+            for idx in range(len(history)-1, -1, -1):
+                _, text = history[idx]
+                if "闲聊已成功加载" in text:
+                    break
+            else:
+                idx = len(history)
+            dialog_history = []
+            for i in range(idx, len(history)):
+                _, text = history[i]
+                match = re.search(pattern, text, re.DOTALL)
+                if match:
+                    old_query = match.group(2).strip()
+                    old_reponse = match.group(3).strip()
+                    dialog_history.append((old_query, old_reponse))
+            logger.debug(f"dialog_history: {dialog_history}")
+            result = llm(query, history=dialog_history)
+            for resp in [result]:
+                reply = f"问：{query}\n\n答：{resp}"
+                history[-1][-1] += "\n\n" + reply
+                yield history, ""
+    except Exception as e:
+        reply = str(e)
+        history.append([None, reply])
+        yield history, ""
     logger.info(f"flagging: username={FLAG_USER_NAME}, task={task}, query={query}, history={history}")
     flag_csv_logger.flag([task, query, history], username=FLAG_USER_NAME)
 
