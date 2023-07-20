@@ -20,7 +20,7 @@
    - prerequisite-2：模型已托管在huggingface
 3. Custom API：基于自定义API
    - prerequisite：已搭建好自定义API
-4. Local：本地加载模型
+4. Local：本地加载模型，支持8bit或4bit方式加载，也支持多卡推理
 
 ### 1. Web UI
 ```bash
@@ -47,7 +47,7 @@ Web UI可实现如下功能：
    - 搜索引擎：支持输入```SERP_API_KEY```
    - 文本摘要：支持上传多个文件
    - 问答机器人：支持修改相关参数（如：召回阈值、召回数量等）、切换不同向量数据库、新增向量数据库、删除向量数据库
-- ```模型配置```标签中可以切换LLM模型、切换Embeddings模型、修改LLM生成参数（如：```do_sample```, ```top_p```等）
+- ```模型配置```标签中可以切换LLM模型、切换Embeddings模型、修改模型加载方式（如：多卡、4bit、8bit等）、修改LLM生成参数（如：```do_sample```, ```top_p```等）
 
 **PS**: 目前Web UI仅支持local方式加载模型
 
