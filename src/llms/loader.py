@@ -137,23 +137,22 @@ def load_checkpoint(args, model: PreTrainedModel, strict: bool = True) -> None:
 
 def load(args) -> Pipeline:
     # load tokenizer
-    tokenizer_path = args.tokenizer_path if hasattr(args, "tokenizer_path") else args.model_name_or_path
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
 
     # set eos token
-    if "chatglm2" in args.model_name_or_path.lower():
+    if "chatglm2" in args.model_name.lower():
         eos_token_id = tokenizer.get_command("eop") if args.checkpoint is not None else tokenizer.get_command("<eos>")
-    elif "chatglm1_1" in args.model_name_or_path.lower():
+    elif "chatglm1_1" in args.model_name.lower():
         eos_token_id = tokenizer.eos_token_id
-    elif "chatglm" in args.model_name_or_path.lower():
+    elif "chatglm" in args.model_name.lower():
         eos_token_id = tokenizer.eop_token_id
-    elif "baichuan" in args.model_name_or_path.lower():
+    elif "baichuan" in args.model_name.lower():
         eos_token_id = tokenizer.bos_token_id if args.checkpoint is not None else tokenizer.eos_token_id
     else:
         eos_token_id = tokenizer.eos_token_id
 
     # load model
-    if "chatglm" in args.model_name_or_path.lower():
+    if "chatglm" in args.model_name.lower():
         model_class = AutoModelForSeq2SeqLM
     else:
         model_class = AutoModelForCausalLM
@@ -171,7 +170,7 @@ def load(args) -> Pipeline:
         # "quantization_config": bnb_config,
         "low_cpu_mem_usage": True
     }
-    model = model_class.from_pretrained(args.model_name_or_path,
+    model = model_class.from_pretrained(args.model_name,
                                         **params)
 
     # load checkpoint if available
