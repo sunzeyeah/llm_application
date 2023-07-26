@@ -88,7 +88,7 @@ def get_parser():
     parser.add_argument("--model_name", type=str, default="chatglm2-6B")
     parser.add_argument("--language", type=str, default="zh", help="prompt使用的语言，一般与模型匹配")
     parser.add_argument("--verbose", action="store_true", help="是否输出中间结果")
-    parser.add_argument("--device_map", type=str, default=None, help="device map to allocate model,"
+    parser.add_argument("--device_map", type=str, default="auto", help="device map to allocate model,"
                                                                      "[None] means cpu"
                                                                      "[0, 1, 2, ...], number means single-card"
                                                                      "[auto, balanced, balanced_low_0] means multi-card")
@@ -178,7 +178,20 @@ def initialize_llm() -> str:
     global llm
     try:
         llm = init_llm(args)
-        llm_status = f"""LLM模型：{args.model_name}已成功加载，加载模式：{torch.cuda.device_count() if args.multi_card else "单"}卡 + {args.bits}-bit"""
+        bits = f"{args.bits}-bit"
+        if args.device_map is None:
+            loads = "CPU"
+        elif args.device_map == "0":
+            loads = "单卡"
+        elif args.device_map == "auto":
+            loads = "多卡（自动负载）"
+        elif args.device_map == "balanced":
+            loads = "多卡（均衡负载）"
+        elif args.device_map == "balanced_low_0":
+            loads = "多卡（均衡负载，降低cuda:0）"
+        else:
+            loads = "多卡（自定义负载）"
+        llm_status = f"""LLM模型：{args.model_name}已成功加载，加载模式：{loads} + {bits}"""
     except torch.cuda.OutOfMemoryError as e:
         llm_status = f"""【WARNING】加载LLM模型：{args.model_name} 时发生CUDA out of memory，请开启多卡或者使用8-bit和4-bit"""
         logger.error(llm_status, e)
@@ -211,7 +224,7 @@ def update_model_params(
         llm_model: str,
         embedding_model: str,
         kb_name: str,
-        multi_card: bool,
+        device_map: str,
         bits: int,
         max_length_generation: int,
         do_sample: bool,
@@ -224,7 +237,7 @@ def update_model_params(
     global llm
     global embeddings
     global vector_store
-    args.multi_card = multi_card
+    args.device_map = device_map
     args.bits = bits
     args.max_length_generation = max_length_generation
     args.do_sample = do_sample
@@ -696,9 +709,11 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         bits_radio = gr.Radio([4, 8, 16, 32], value=args.bits,
                               label="模型加载bit数",
                               interactive=True)
-        multi_card_checkbox = gr.Checkbox(args.multi_card,
-                                          label="开启多卡推理",
-                                          interactive=True)
+        device_map_radio = gr.Radio([None, "0", "auto", "balanced", "balanced_low_0", "custom"],
+                                    value=args.device_map,
+                                    label="是否使用GPU、是否开启多卡以及多卡负载管理",
+                                    info="None-CPU，0-单卡，auto-多卡（自动负载），balanced-多卡（均衡负载），balanced_low_0-多卡（均衡负载，降低cuda:0），custom-多卡（自定义负载）",
+                                    interactive=True)
         max_length_generation_slider = gr.Slider(8, 4096, value=args.max_length_generation, step=1,
                                                  label="生成参数：max_new_tokens",
                                                  interactive=True)
@@ -717,7 +732,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         update_model_params_button = gr.Button("更新参数并重新加载模型")
         update_model_params_button.click(update_model_params,
                                          show_progress=True,
-                                         inputs=[llm_model_dropdown, embedding_model_dropdown, kb_select_dropdown, multi_card_checkbox,
+                                         inputs=[llm_model_dropdown, embedding_model_dropdown, kb_select_dropdown, device_map_radio,
                                                  bits_radio, max_length_generation_slider, do_sample_checkbox, top_p_slider,
                                                  temperature_slider, repetition_penalty_slider, history_length_slider, chatbot],
                                          outputs=chatbot)

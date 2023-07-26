@@ -51,7 +51,7 @@ def get_parser():
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--checkpoint", type=str)
     parser.add_argument("--verbose", action="store_true", help="是否输出中间结果")
-    parser.add_argument("--device_map", type=str, default=None, help="device map to allocate model,"
+    parser.add_argument("--device_map", type=str, default="auto", help="device map to allocate model,"
                                                                      "[None] means cpu"
                                                                      "[0, 1, 2, ...], number means single-card"
                                                                      "[auto, balanced, balanced_low_0] means multi-card")
