@@ -1,3 +1,4 @@
+import os
 import glob
 from typing import Dict
 import torch
@@ -137,7 +138,8 @@ def load_checkpoint(args, model: PreTrainedModel, strict: bool = True) -> None:
 
 def load(args) -> Pipeline:
     # load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(os.path.join(args.model_path, args.model_name),
+                                              trust_remote_code=True)
 
     # set eos token
     if "chatglm2" in args.model_name.lower():
@@ -170,7 +172,7 @@ def load(args) -> Pipeline:
         # "quantization_config": bnb_config,
         "low_cpu_mem_usage": True
     }
-    model = model_class.from_pretrained(args.model_name,
+    model = model_class.from_pretrained(os.path.join(args.model_path, args.model_name),
                                         **params)
 
     # load checkpoint if available
