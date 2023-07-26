@@ -47,11 +47,14 @@ def get_parser():
     parser.add_argument("--api_url", type=str, default=None)
     parser.add_argument("--api_key", type=str, default=None)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--local_rank", type=int, default=0)
+    # parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--checkpoint", type=str)
     parser.add_argument("--verbose", action="store_true", help="是否输出中间结果")
-    parser.add_argument("--multi_card", action="store_true", help="是否使用多卡推理")
+    parser.add_argument("--device_map", type=str, default=None, help="device map to allocate model,"
+                                                                     "[None] means cpu"
+                                                                     "[0, 1, 2, ...], number means single-card"
+                                                                     "[auto, balanced, balanced_low_0] means multi-card")
     # generation config
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--max_length_generation", type=int, default=512, help="Maximum number of newly generated tokens")
@@ -138,7 +141,7 @@ def init_task(args, llm: LLM, embeddings: Embeddings = None) -> Task:
             if args.embedding_name == "openai":
                 embeddings = OpenAIEmbeddings()
             else:
-                embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+                embedding_device = f"cuda:{torch.cuda.current_device()}" if torch.cuda.is_available() else "cpu"
                 embeddings = HuggingFaceEmbeddings(model_name=os.path.join(args.model_path, args.embedding_name),
                                                    model_kwargs={'device': embedding_device})
         task = ChatBot(llm=llm, language=args.language, verbose=args.verbose,

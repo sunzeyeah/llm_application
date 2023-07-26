@@ -88,8 +88,11 @@ def get_parser():
     parser.add_argument("--model_name", type=str, default="chatglm2-6B")
     parser.add_argument("--language", type=str, default="zh", help="prompt使用的语言，一般与模型匹配")
     parser.add_argument("--verbose", action="store_true", help="是否输出中间结果")
-    parser.add_argument("--multi_card", action="store_true", help="是否使用多卡推理")
-    parser.add_argument("--local_rank", type=int, default=0)
+    parser.add_argument("--device_map", type=str, default=None, help="device map to allocate model,"
+                                                                     "[None] means cpu"
+                                                                     "[0, 1, 2, ...], number means single-card"
+                                                                     "[auto, balanced, balanced_low_0] means multi-card")
+    # parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--bits", type=int, default=16)
     parser.add_argument("--checkpoint", type=str, default=None)
 
@@ -137,7 +140,7 @@ def init_embeddings_and_vector_store(vector_dir: str,
     global vector_store
     try:
         # load embedding model
-        embedding_device = f"cuda:{args.local_rank}" if torch.cuda.is_available() else "cpu"
+        embedding_device = f"cuda:{torch.cuda.current_device()}" if torch.cuda.is_available() else "cpu"
         embeddings = HuggingFaceEmbeddings(model_name=os.path.join(args.model_path, args.embedding_name),
                                            model_kwargs={'device': embedding_device})
         # make directory (if vector_dir does not exist)
@@ -231,7 +234,7 @@ def update_model_params(
     args.history_length = history_length
 
     # release occupied GPU memory
-    if torch.cuda.is_available() and args.local_rank >= 0:
+    if torch.cuda.is_available():
         # print_gpu_utilization("before gpu release", args.local_rank, False)
         try:
             del llm.pipeline.model
