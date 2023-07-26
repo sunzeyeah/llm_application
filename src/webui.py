@@ -89,7 +89,7 @@ def get_parser():
     parser.add_argument("--language", type=str, default="zh", help="prompt使用的语言，一般与模型匹配")
     parser.add_argument("--verbose", action="store_true", help="是否输出中间结果")
     parser.add_argument("--device_map", type=str, default="auto", help="device map to allocate model,"
-                                                                     "[None] means cpu"
+                                                                     "[cpu] means cpu"
                                                                      "[0, 1, 2, ...], number means single-card"
                                                                      "[auto, balanced, balanced_low_0] means multi-card")
     # parser.add_argument("--local_rank", type=int, default=0)
@@ -179,7 +179,7 @@ def initialize_llm() -> str:
     try:
         llm = init_llm(args)
         bits = f"{args.bits}-bit"
-        if args.device_map is None:
+        if args.device_map == "cpu":
             loads = "CPU"
         elif args.device_map == "0":
             loads = "单卡"
@@ -709,10 +709,10 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         bits_radio = gr.Radio([4, 8, 16, 32], value=args.bits,
                               label="模型加载bit数",
                               interactive=True)
-        device_map_radio = gr.Radio([None, "0", "auto", "balanced", "balanced_low_0", "custom"],
+        device_map_radio = gr.Radio(["cpu", "0", "auto", "balanced", "balanced_low_0", "custom"],
                                     value=args.device_map,
                                     label="是否使用GPU、是否开启多卡以及多卡负载管理",
-                                    info="None-CPU，0-单卡，auto-多卡（自动负载），balanced-多卡（均衡负载），balanced_low_0-多卡（均衡负载，降低cuda:0），custom-多卡（自定义负载）",
+                                    info="cpu-CPU，0-单卡，auto-多卡（自动负载），balanced-多卡（均衡负载），balanced_low_0-多卡（均衡负载，降低cuda:0），custom-多卡（自定义负载）",
                                     interactive=True)
         max_length_generation_slider = gr.Slider(8, 4096, value=args.max_length_generation, step=1,
                                                  label="生成参数：max_new_tokens",

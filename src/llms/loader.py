@@ -163,9 +163,17 @@ def load(args) -> Pipeline:
         dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
     else:
         dtype = torch.float32
+
+    device_map = args.device_map
+    if args.device_map == "custom":
+        if "llama" in args.model_name.lower() or "baichuan" in args.model_name.lower() or "vicuna" in args.model_name.lower():
+            device_map = llama_and_baichuan_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+        elif "chatglm" in args.model_name.lower():
+            device_map = chatglm_auto_configure_device_map(torch.cuda.device_count(), args.model_name)
+
     params = {
         "trust_remote_code": True,
-        "device_map": args.device_map,
+        "device_map": device_map,
         "torch_dtype": dtype,
         "load_in_8bit": hasattr(args, "bits") and args.bits == 8,
         "load_in_4bit": hasattr(args, "bits") and args.bits == 4,
