@@ -226,6 +226,7 @@ def update_model_params(
         kb_name: str,
         device_map: str,
         bits: int,
+        checkpoint: str,
         max_length_generation: int,
         do_sample: bool,
         top_p: float,
@@ -239,6 +240,7 @@ def update_model_params(
     global vector_store
     args.device_map = device_map
     args.bits = bits
+    args.checkpoint = checkpoint
     args.max_length_generation = max_length_generation
     args.do_sample = do_sample
     args.top_p = top_p
@@ -714,13 +716,14 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                                     label="是否使用GPU、是否开启多卡以及多卡负载管理",
                                     info="cpu-CPU，0-单卡，auto-多卡（自动负载），balanced-多卡（均衡负载），balanced_low_0-多卡（均衡负载，降低cuda:0），custom-多卡（自定义负载）",
                                     interactive=True)
+        checkpoint_textbox = gr.Textbox(value=args.checkpoint, label="模型checkpoint文件名", interactive=True)
         max_length_generation_slider = gr.Slider(8, 4096, value=args.max_length_generation, step=1,
                                                  label="生成参数：max_new_tokens",
                                                  interactive=True)
         do_sample_checkbox = gr.Checkbox(args.do_sample,
                                          label="生成参数：do_sample",
                                          interactive=True)
-        top_p_slider = gr.Slider(0.0, 1.0, value=args.top_p, step=0.1,
+        top_p_slider = gr.Slider(0.0, 1.0, value=args.top_p, step=0.01,
                                  label="生成参数：top_p", interactive=True)
         temperature_slider = gr.Slider(0.0, 5.0, value=args.temperature, step=0.1,
                                        label="生成参数：temperature", interactive=True)
@@ -733,7 +736,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
         update_model_params_button.click(update_model_params,
                                          show_progress=True,
                                          inputs=[llm_model_dropdown, embedding_model_dropdown, kb_select_dropdown, device_map_radio,
-                                                 bits_radio, max_length_generation_slider, do_sample_checkbox, top_p_slider,
+                                                 bits_radio, checkpoint_textbox, max_length_generation_slider, do_sample_checkbox, top_p_slider,
                                                  temperature_slider, repetition_penalty_slider, history_length_slider, chatbot],
                                          outputs=chatbot)
 
