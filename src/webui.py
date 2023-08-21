@@ -99,7 +99,7 @@ def get_parser():
     # generation config
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--max_length_generation", type=int, default=256, help="Maximum number of newly generated tokens")
-    parser.add_argument("--do_sample", type=bool, default=False)
+    parser.add_argument("--do_sample", action="store_true")
     parser.add_argument("--num_return_sequences", type=int, default=1)
     parser.add_argument("--top_k", type=int, default=10)
     parser.add_argument("--top_p", type=float, default=0.9)
